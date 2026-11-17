@@ -26,6 +26,13 @@ subprojects {
         options.compilerArgs.add("-parameters")
     }
 
+    // Shared language-neutral contracts and golden vectors for tests.
+    val contractsDir = rootProject.layout.projectDirectory.dir("contracts/v1").asFile.absolutePath
+
+    tasks.withType<Test>().configureEach {
+        systemProperty("doclens.contractsDir", contractsDir)
+    }
+
     tasks.named<Test>("test") {
         useJUnitPlatform {
             excludeTags("external")
