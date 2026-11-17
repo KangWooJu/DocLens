@@ -1,0 +1,29 @@
+# Agent instructions and working files
+AGENTS.md
+CLAUDE.md
+.agent-work/
+.claude/
+.codex/
+.archify/
+graphify-out/
+
+# OS and editor
+.DS_Store
+.idea/
+*.iml
+.vscode/
+
+# Build output
+build/
+.gradle/
+out/
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Local secrets
+.env
+.env.*
+!.env.example
