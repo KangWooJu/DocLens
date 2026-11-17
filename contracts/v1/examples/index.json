@@ -1,0 +1,184 @@
+{
+  "examples": [
+    {
+      "file": "accept.accepted.json",
+      "schema": "collection.schema.json",
+      "definition": "accept",
+      "expect": "accepted"
+    },
+    {
+      "file": "cancelRequest.accepted.json",
+      "schema": "collection.schema.json",
+      "definition": "cancelRequest",
+      "expect": "accepted"
+    },
+    {
+      "file": "collectionRequest.accepted.json",
+      "schema": "collection.schema.json",
+      "definition": "collectionRequest",
+      "expect": "accepted"
+    },
+    {
+      "file": "collectionRequest.rejected.json",
+      "schema": "collection.schema.json",
+      "definition": "collectionRequest",
+      "expect": "rejected"
+    },
+    {
+      "file": "collectionRequestApplicability.rejected.json",
+      "schema": "collection.schema.json",
+      "definition": "collectionRequest",
+      "expect": "rejected"
+    },
+    {
+      "file": "discovery.accepted.json",
+      "schema": "collection.schema.json",
+      "definition": "discovery",
+      "expect": "accepted"
+    },
+    {
+      "file": "discoveryOptionalOnly.accepted.json",
+      "schema": "collection.schema.json",
+      "definition": "discovery",
+      "expect": "accepted"
+    },
+    {
+      "file": "documentOutcome.accepted.json",
+      "schema": "collection.schema.json",
+      "definition": "documentOutcome",
+      "expect": "accepted"
+    },
+    {
+      "file": "documentOutcome.rejected.json",
+      "schema": "collection.schema.json",
+      "definition": "documentOutcome",
+      "expect": "rejected"
+    },
+    {
+      "file": "error.accepted.json",
+      "schema": "collection.schema.json",
+      "definition": "error",
+      "expect": "accepted"
+    },
+    {
+      "file": "failureOutcome.accepted.json",
+      "schema": "collection.schema.json",
+      "definition": "documentOutcome",
+      "expect": "accepted"
+    },
+    {
+      "file": "handoffAck.accepted.json",
+      "schema": "collection.schema.json",
+      "definition": "handoffAck",
+      "expect": "accepted"
+    },
+    {
+      "file": "manifestEnvelope.accepted.json",
+      "schema": "collection.schema.json",
+      "definition": "manifestEnvelope",
+      "expect": "accepted"
+    },
+    {
+      "file": "noPublicationObservation.accepted.json",
+      "schema": "collection.schema.json",
+      "definition": "noPublicationObservation",
+      "expect": "accepted"
+    },
+    {
+      "file": "observationAck.accepted.json",
+      "schema": "collection.schema.json",
+      "definition": "observationAck",
+      "expect": "accepted"
+    },
+    {
+      "file": "observationNotice.accepted.json",
+      "schema": "collection.schema.json",
+      "definition": "observationNotice",
+      "expect": "accepted"
+    },
+    {
+      "file": "observationNoticesPage.accepted.json",
+      "schema": "collection.schema.json",
+      "definition": "observationNoticesPage",
+      "expect": "accepted"
+    },
+    {
+      "file": "processRequest.accepted.json",
+      "schema": "collection.schema.json",
+      "definition": "processRequest",
+      "expect": "accepted"
+    },
+    {
+      "file": "processingResultReceipt.accepted.json",
+      "schema": "collection.schema.json",
+      "definition": "processingResultReceipt",
+      "expect": "accepted"
+    },
+    {
+      "file": "processingRunResultReceipt.accepted.json",
+      "schema": "collection.schema.json",
+      "definition": "processingRunResultReceipt",
+      "expect": "accepted"
+    },
+    {
+      "file": "publicationManifest.accepted.json",
+      "schema": "publication-manifest.schema.json",
+      "definition": null,
+      "expect": "accepted"
+    },
+    {
+      "file": "publicationManifest.rejected.json",
+      "schema": "publication-manifest.schema.json",
+      "definition": null,
+      "expect": "rejected"
+    },
+    {
+      "file": "readyRun.accepted.json",
+      "schema": "collection.schema.json",
+      "definition": "readyRun",
+      "expect": "accepted"
+    },
+    {
+      "file": "readyRunsPage.accepted.json",
+      "schema": "collection.schema.json",
+      "definition": "readyRunsPage",
+      "expect": "accepted"
+    },
+    {
+      "file": "resumeRequest.accepted.json",
+      "schema": "collection.schema.json",
+      "definition": "resumeRequest",
+      "expect": "accepted"
+    },
+    {
+      "file": "status.accepted.json",
+      "schema": "collection.schema.json",
+      "definition": "status",
+      "expect": "accepted"
+    },
+    {
+      "file": "supplement.accepted.json",
+      "schema": "collection.schema.json",
+      "definition": "supplement",
+      "expect": "accepted"
+    },
+    {
+      "file": "versionCatalogResult.accepted.json",
+      "schema": "collection.schema.json",
+      "definition": "versionCatalogResult",
+      "expect": "accepted"
+    },
+    {
+      "file": "versionCheckRequest.accepted.json",
+      "schema": "collection.schema.json",
+      "definition": "versionCheckRequest",
+      "expect": "accepted"
+    },
+    {
+      "file": "versionCheckRequest.rejected.json",
+      "schema": "collection.schema.json",
+      "definition": "versionCheckRequest",
+      "expect": "rejected"
+    }
+  ]
+}
