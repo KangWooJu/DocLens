@@ -1,0 +1,15 @@
+spring:
+  application:
+    name: pipeline
+  config:
+    # Local values: optional .env at the repository root (git-ignored).
+    # Works from the repository root and from the module directory (bootRun).
+    import:
+      - optional:file:./.env[.properties]
+      - optional:file:../.env[.properties]
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
