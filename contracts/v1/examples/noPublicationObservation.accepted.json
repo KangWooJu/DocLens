@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "resultKind": "NO_PUBLICATION_OBSERVATION",
+  "reason": "OPTIONAL_SCOPE_EMPTY",
+  "publicationEligible": false,
+  "requestId": "11111111-1111-4111-8111-111111111111",
+  "traceId": "11111111-1111-4111-8111-111111111111",
+  "runId": "11111111-1111-4111-8111-111111111111",
+  "snapshotId": "33333333-3333-4333-8333-333333333333",
+  "scopeHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "sourceRegistryHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "discovery": {
+    "objectKey": "discovery/fixture-empty-optional/discovery.json",
+    "contentHash": "sha256:72399251bca184214a612ec93428fe4a62f9256e25d8010e1ec77ea17da9ca82",
+    "sizeBytes": 1131
+  },
+  "targetCount": 0,
+  "batchCount": 0,
+  "requiredInputCount": 0,
+  "optionalInputCount": 1,
+  "projections": [
+    {
+      "packScope": {
+        "project": "spring-boot",
+        "exactVersion": "4.0.0",
+        "applicability": "EXACT_RELEASE"
+      },
+      "inputScopeKey": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "observationSequence": 1
+    }
+  ],
+  "observedAt": "2026-10-24T00:00:00Z"
+}

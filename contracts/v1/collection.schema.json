@@ -1,0 +1,2434 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:doclens:collection:1",
+  "$defs": {
+    "input": {
+      "type": "object",
+      "properties": {
+        "sourceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "project": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "exactVersion": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:\\.RELEASE)?$"
+        },
+        "sourceType": {
+          "enum": [
+            "html",
+            "config-metadata",
+            "javadoc"
+          ]
+        },
+        "documentType": {
+          "enum": [
+            "REFERENCE",
+            "APPLICATION_PROPERTIES",
+            "DEPENDENCY_VERSIONS",
+            "PROJECT_OVERVIEW",
+            "GUIDE",
+            "RELEASE_NOTES",
+            "MIGRATION_GUIDE",
+            "CONFIG_METADATA",
+            "JAVADOC",
+            "EXAMPLE"
+          ]
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "applicability": {
+          "const": "EXACT_RELEASE"
+        }
+      },
+      "required": [
+        "sourceId",
+        "project",
+        "exactVersion",
+        "sourceType",
+        "documentType",
+        "required",
+        "applicability"
+      ],
+      "additionalProperties": false
+    },
+    "objectRef": {
+      "type": "object",
+      "properties": {
+        "objectKey": {
+          "type": "string",
+          "pattern": "^(?!.*(?:^|/)\\.{1,2}(?:/|$))(raw|manifests|discovery|packs|deployments|models|publication-manifests|channels)/[a-zA-Z0-9_@.-]+(?:/[a-zA-Z0-9_@.-]+)*$"
+        },
+        "contentHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "sizeBytes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "objectKey",
+        "contentHash",
+        "sizeBytes"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "enum": [
+            "L1",
+            "L2",
+            "UNVERIFIED"
+          ]
+        },
+        "method": {
+          "enum": [
+            "IMMUTABLE_RELEASE_ARTIFACT",
+            "VERSION_PINNED_URL",
+            "PAGE_MARKER",
+            "APPROVED_ALTERNATIVE",
+            "OBSERVATION_ONLY"
+          ]
+        },
+        "exactVersion": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:\\.RELEASE)?$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sourceUrl": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://[^/?#]+/"
+        },
+        "observedAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "contentHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "selectorRuleId": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "level",
+        "method",
+        "exactVersion",
+        "sourceUrl",
+        "observedAt",
+        "contentHash",
+        "selectorRuleId"
+      ],
+      "additionalProperties": false
+    },
+    "collectionRequest": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "traceId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "requestKind": {
+          "enum": [
+            "COLLECT",
+            "RECHECK"
+          ]
+        },
+        "sourceRegistryHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "inputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/input"
+          },
+          "minItems": 1,
+          "maxItems": 100
+        },
+        "requestedAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "requestId",
+        "traceId",
+        "requestKind",
+        "sourceRegistryHash",
+        "inputs",
+        "requestedAt"
+      ],
+      "additionalProperties": false
+    },
+    "accept": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "jobId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "requestHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "state": {
+          "enum": [
+            "QUEUED",
+            "RETRY_WAIT",
+            "RUNNING",
+            "SUCCEEDED",
+            "FAILED_FINAL",
+            "NEEDS_REVIEW",
+            "CANCELLED"
+          ]
+        },
+        "duplicate": {
+          "type": "boolean"
+        },
+        "acceptedAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "requestId",
+        "jobId",
+        "requestHash",
+        "state",
+        "duplicate",
+        "acceptedAt"
+      ],
+      "additionalProperties": false
+    },
+    "status": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "jobId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "state": {
+          "enum": [
+            "QUEUED",
+            "RETRY_WAIT",
+            "RUNNING",
+            "SUCCEEDED",
+            "FAILED_FINAL",
+            "NEEDS_REVIEW",
+            "CANCELLED"
+          ]
+        },
+        "waitReason": {
+          "anyOf": [
+            {
+              "enum": [
+                "INPUT",
+                "BUDGET",
+                "HOST",
+                "RETRY",
+                "SHUTDOWN"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "attemptCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "leaseEpoch": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "nextAttemptAt": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "Z$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/objectRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lastErrorCode": {
+          "anyOf": [
+            {
+              "enum": [
+                "SCHEMA_UNSUPPORTED",
+                "VALIDATION_FAILED",
+                "ID_INPUT_CONFLICT",
+                "NOT_FOUND",
+                "AUTH_REQUIRED",
+                "FORBIDDEN",
+                "STALE_OWNER",
+                "INVALID_TRANSITION",
+                "INPUT_NOT_SEALED",
+                "INPUT_INCOMPLETE",
+                "HASH_MISMATCH",
+                "COUNT_MISMATCH",
+                "SCOPE_MISMATCH",
+                "VERSION_UNVERIFIED",
+                "SOURCE_UNAPPROVED",
+                "ROBOTS_DENIED",
+                "ROBOTS_UNREACHABLE",
+                "URL_DENIED",
+                "REDIRECT_DENIED",
+                "RESPONSE_TOO_LARGE",
+                "INVALID_BODY",
+                "HTTP_CLIENT",
+                "HTTP_RETRY_EXHAUSTED",
+                "STORAGE_FAILED",
+                "BUDGET_EXHAUSTED",
+                "INTERNAL_ERROR",
+                "APPLICABILITY_UNSUPPORTED"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "requestId",
+        "jobId",
+        "state",
+        "waitReason",
+        "attemptCount",
+        "leaseEpoch",
+        "nextAttemptAt",
+        "updatedAt",
+        "result",
+        "lastErrorCode"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "SUCCEEDED"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "result": {
+                "$ref": "#/$defs/objectRef"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "RETRY_WAIT"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "nextAttemptAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "Z$"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "target": {
+      "type": "object",
+      "properties": {
+        "documentId": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://[^/?#]+/"
+        },
+        "input": {
+          "$ref": "#/$defs/input"
+        }
+      },
+      "required": [
+        "documentId",
+        "url",
+        "input"
+      ],
+      "additionalProperties": false
+    },
+    "discovery": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "runId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "scopeHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "sourceRegistryHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "observationSequence": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "state": {
+          "const": "SEALED"
+        },
+        "startedAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "sealedAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "discoveryMethod": {
+          "enum": [
+            "NAV_CLOSED",
+            "SITEMAP_CLOSED",
+            "EXPLICIT_ARTIFACT_LIST"
+          ]
+        },
+        "requiredInputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/input"
+          },
+          "minItems": 0,
+          "maxItems": 100
+        },
+        "optionalInputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/input"
+          },
+          "minItems": 0,
+          "maxItems": 100
+        },
+        "targetCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "targetList": {
+          "$ref": "#/$defs/objectRef"
+        },
+        "batches": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "batchId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "targetCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100
+              },
+              "targetList": {
+                "$ref": "#/$defs/objectRef"
+              }
+            },
+            "required": [
+              "batchId",
+              "targetCount",
+              "targetList"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 0
+        },
+        "officialRevision": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "deletionEvidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "documentId": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "evidence": {
+                "$ref": "#/$defs/evidence"
+              },
+              "reason": {
+                "enum": [
+                  "OFFICIAL_REMOVAL",
+                  "COMPLETE_SCOPE_DIFF_REVIEW"
+                ]
+              }
+            },
+            "required": [
+              "documentId",
+              "evidence",
+              "reason"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 0
+        },
+        "snapshotId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "projections": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/packProjection"
+          },
+          "minItems": 1,
+          "maxItems": 100
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "runId",
+        "scopeHash",
+        "sourceRegistryHash",
+        "observationSequence",
+        "state",
+        "startedAt",
+        "sealedAt",
+        "discoveryMethod",
+        "requiredInputs",
+        "optionalInputs",
+        "targetCount",
+        "targetList",
+        "batches",
+        "officialRevision",
+        "deletionEvidence",
+        "snapshotId",
+        "projections"
+      ],
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "properties": {
+            "requiredInputs": {
+              "minItems": 1
+            }
+          }
+        },
+        {
+          "properties": {
+            "optionalInputs": {
+              "minItems": 1
+            }
+          }
+        }
+      ]
+    },
+    "documentOutcome": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "schemaVersion": {
+              "const": 1
+            },
+            "eventType": {
+              "const": "DocumentCollected"
+            },
+            "runId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "batchId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "documentId": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "input": {
+              "$ref": "#/$defs/input"
+            },
+            "url": {
+              "type": "string",
+              "format": "uri",
+              "pattern": "^https://[^/?#]+/"
+            },
+            "finalUrl": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uri",
+                  "pattern": "^https://[^/?#]+/"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "observedAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "Z$"
+            },
+            "traceId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "attemptCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3
+            },
+            "sourceCommit": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "versionEvidence": {
+              "$ref": "#/$defs/evidence"
+            },
+            "outcome": {
+              "const": "SUCCESS"
+            },
+            "raw": {
+              "$ref": "#/$defs/objectRef"
+            },
+            "contentType": {
+              "enum": [
+                "text/html",
+                "application/json",
+                "application/java-archive",
+                "application/zip"
+              ]
+            },
+            "httpStatus": {
+              "enum": [
+                200,
+                304
+              ]
+            },
+            "etag": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "lastModified": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "reusedFromContentHash": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "snapshotId": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "schemaVersion",
+            "eventType",
+            "runId",
+            "batchId",
+            "documentId",
+            "input",
+            "url",
+            "finalUrl",
+            "observedAt",
+            "traceId",
+            "attemptCount",
+            "sourceCommit",
+            "versionEvidence",
+            "outcome",
+            "raw",
+            "contentType",
+            "httpStatus",
+            "etag",
+            "lastModified",
+            "reusedFromContentHash",
+            "snapshotId"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "schemaVersion": {
+              "const": 1
+            },
+            "eventType": {
+              "const": "DocumentCollected"
+            },
+            "runId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "batchId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "documentId": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "input": {
+              "$ref": "#/$defs/input"
+            },
+            "url": {
+              "type": "string",
+              "format": "uri",
+              "pattern": "^https://[^/?#]+/"
+            },
+            "finalUrl": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uri",
+                  "pattern": "^https://[^/?#]+/"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "observedAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "Z$"
+            },
+            "traceId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "attemptCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3
+            },
+            "sourceCommit": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "versionEvidence": {
+              "$ref": "#/$defs/evidence"
+            },
+            "outcome": {
+              "const": "FAILED"
+            },
+            "errorCode": {
+              "enum": [
+                "SCHEMA_UNSUPPORTED",
+                "VALIDATION_FAILED",
+                "ID_INPUT_CONFLICT",
+                "NOT_FOUND",
+                "AUTH_REQUIRED",
+                "FORBIDDEN",
+                "STALE_OWNER",
+                "INVALID_TRANSITION",
+                "INPUT_NOT_SEALED",
+                "INPUT_INCOMPLETE",
+                "HASH_MISMATCH",
+                "COUNT_MISMATCH",
+                "SCOPE_MISMATCH",
+                "VERSION_UNVERIFIED",
+                "SOURCE_UNAPPROVED",
+                "ROBOTS_DENIED",
+                "ROBOTS_UNREACHABLE",
+                "URL_DENIED",
+                "REDIRECT_DENIED",
+                "RESPONSE_TOO_LARGE",
+                "INVALID_BODY",
+                "HTTP_CLIENT",
+                "HTTP_RETRY_EXHAUSTED",
+                "STORAGE_FAILED",
+                "BUDGET_EXHAUSTED",
+                "INTERNAL_ERROR",
+                "APPLICABILITY_UNSUPPORTED"
+              ]
+            },
+            "failedAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "Z$"
+            },
+            "needsReview": {
+              "type": "boolean"
+            },
+            "httpStatus": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 100,
+                  "maximum": 599
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "snapshotId": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "schemaVersion",
+            "eventType",
+            "runId",
+            "batchId",
+            "documentId",
+            "input",
+            "url",
+            "finalUrl",
+            "observedAt",
+            "traceId",
+            "attemptCount",
+            "sourceCommit",
+            "versionEvidence",
+            "outcome",
+            "errorCode",
+            "failedAt",
+            "needsReview",
+            "httpStatus",
+            "snapshotId"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "manifestEnvelope": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "runId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "batchId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "discovery": {
+          "$ref": "#/$defs/objectRef"
+        },
+        "scopeHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "targetList": {
+          "$ref": "#/$defs/objectRef"
+        },
+        "jsonl": {
+          "$ref": "#/$defs/objectRef"
+        },
+        "targetCount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "successCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failureCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sealedAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "producingJobId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "leaseEpoch": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "retentionResources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/retentionResource"
+          },
+          "minItems": 1,
+          "maxItems": 256
+        },
+        "snapshotId": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "runId",
+        "batchId",
+        "discovery",
+        "scopeHash",
+        "targetList",
+        "jsonl",
+        "targetCount",
+        "successCount",
+        "failureCount",
+        "sealedAt",
+        "producingJobId",
+        "leaseEpoch",
+        "retentionResources",
+        "snapshotId"
+      ],
+      "additionalProperties": false
+    },
+    "supplement": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "supplementId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "runId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "originalBatchId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "parentEnvelope": {
+          "$ref": "#/$defs/objectRef"
+        },
+        "replacementEnvelope": {
+          "$ref": "#/$defs/objectRef"
+        },
+        "replacesDocumentIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "minItems": 1,
+          "maxItems": 100
+        },
+        "reason": {
+          "enum": [
+            "RETRY_SUCCEEDED",
+            "VERSION_EVIDENCE_RESOLVED",
+            "OPERATOR_RESUME"
+          ]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "supplementId",
+        "runId",
+        "originalBatchId",
+        "parentEnvelope",
+        "replacementEnvelope",
+        "replacesDocumentIds",
+        "reason",
+        "createdAt"
+      ],
+      "additionalProperties": false
+    },
+    "processRequest": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "traceId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "runId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "discovery": {
+          "$ref": "#/$defs/objectRef"
+        },
+        "envelopes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/objectRef"
+          },
+          "minItems": 1
+        },
+        "supplements": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/objectRef"
+          },
+          "minItems": 0
+        },
+        "processingConfigHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "modelChecksum": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "activationMode": {
+          "enum": [
+            "AUTO",
+            "BUILD_ONLY",
+            "MANUAL_ROLLBACK"
+          ]
+        },
+        "requestedAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "snapshotId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "readyRunId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "readinessSequence": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "protectedObjects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/protectedObject"
+          },
+          "minItems": 1,
+          "maxItems": 100000
+        },
+        "projections": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/processProjection"
+          },
+          "minItems": 1,
+          "maxItems": 100
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "requestId",
+        "traceId",
+        "runId",
+        "discovery",
+        "envelopes",
+        "supplements",
+        "processingConfigHash",
+        "modelChecksum",
+        "activationMode",
+        "requestedAt",
+        "snapshotId",
+        "readyRunId",
+        "readinessSequence",
+        "protectedObjects",
+        "projections"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "activationMode": {
+                "enum": [
+                  "AUTO",
+                  "MANUAL_ROLLBACK"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "projections": {
+                "items": {
+                  "properties": {
+                    "expectedPublicationSequence": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "activationMode": {
+                "const": "MANUAL_ROLLBACK"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "projections": {
+                "items": {
+                  "properties": {
+                    "activationApprovalId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "activationMode": {
+                "const": "BUILD_ONLY"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "projections": {
+                "items": {
+                  "properties": {
+                    "activationApprovalId": {
+                      "type": "null"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "error": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "code": {
+          "enum": [
+            "SCHEMA_UNSUPPORTED",
+            "VALIDATION_FAILED",
+            "ID_INPUT_CONFLICT",
+            "NOT_FOUND",
+            "AUTH_REQUIRED",
+            "FORBIDDEN",
+            "STALE_OWNER",
+            "INVALID_TRANSITION",
+            "INPUT_NOT_SEALED",
+            "INPUT_INCOMPLETE",
+            "HASH_MISMATCH",
+            "COUNT_MISMATCH",
+            "SCOPE_MISMATCH",
+            "VERSION_UNVERIFIED",
+            "SOURCE_UNAPPROVED",
+            "ROBOTS_DENIED",
+            "ROBOTS_UNREACHABLE",
+            "URL_DENIED",
+            "REDIRECT_DENIED",
+            "RESPONSE_TOO_LARGE",
+            "INVALID_BODY",
+            "HTTP_CLIENT",
+            "HTTP_RETRY_EXHAUSTED",
+            "STORAGE_FAILED",
+            "BUDGET_EXHAUSTED",
+            "INTERNAL_ERROR",
+            "APPLICABILITY_UNSUPPORTED",
+            "NOTICE_CONFLICT"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "requestId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "traceId": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "code",
+        "message",
+        "requestId",
+        "retryable",
+        "traceId"
+      ],
+      "additionalProperties": false
+    },
+    "retentionResource": {
+      "type": "object",
+      "properties": {
+        "resourceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "resourceEpoch": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "resourceId",
+        "resourceEpoch"
+      ],
+      "additionalProperties": false
+    },
+    "cancelRequest": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "operationId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "operationId",
+        "reason"
+      ],
+      "additionalProperties": false
+    },
+    "resumeRequest": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "operationId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "evidenceRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "operationId",
+        "reason",
+        "evidenceRef"
+      ],
+      "additionalProperties": false
+    },
+    "handoffAck": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "operationId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "holderId": {
+          "type": "string",
+          "pattern": "^processor:[0-9a-f-]{36}$"
+        },
+        "readyRunId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "readinessSequence": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "protectedObjectsDigest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "receiptDigest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "operationId",
+        "holderId",
+        "readyRunId",
+        "readinessSequence",
+        "protectedObjectsDigest",
+        "receiptDigest"
+      ],
+      "additionalProperties": false
+    },
+    "processingResultReceipt": {
+      "type": "object",
+      "properties": {
+        "buildId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "publicationSequence": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "resultObjectRef": {
+          "$ref": "#/$defs/objectRef"
+        }
+      },
+      "required": [
+        "buildId",
+        "publicationSequence",
+        "resultObjectRef"
+      ],
+      "additionalProperties": false
+    },
+    "catalogTarget": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "catalogKind": {
+              "const": "PROJECT_CATALOG"
+            },
+            "catalogSourceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "project": {
+              "type": "null"
+            }
+          },
+          "required": [
+            "catalogKind",
+            "catalogSourceId",
+            "project"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "catalogKind": {
+              "const": "RELEASE_CATALOG"
+            },
+            "catalogSourceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "project": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]*$"
+            }
+          },
+          "required": [
+            "catalogKind",
+            "catalogSourceId",
+            "project"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "versionCheckRequest": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "requestKind": {
+          "const": "VERSION_CHECK"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "traceId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sourceRegistryHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/catalogTarget"
+          },
+          "minItems": 1,
+          "maxItems": 100,
+          "uniqueItems": true
+        },
+        "requestedAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "requestKind",
+        "requestId",
+        "traceId",
+        "sourceRegistryHash",
+        "targets",
+        "requestedAt"
+      ],
+      "additionalProperties": false
+    },
+    "versionCatalogResult": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "runId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sourceRegistryHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "catalogs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "catalogKind": {
+                "enum": [
+                  "PROJECT_CATALOG",
+                  "RELEASE_CATALOG"
+                ]
+              },
+              "catalogSourceId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "project": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9-]*$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "sourceUrl": {
+                "type": "string",
+                "format": "uri",
+                "pattern": "^https://[^/?#]+/"
+              },
+              "observedAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "Z$"
+              },
+              "raw": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/objectRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "outcome": {
+                "enum": [
+                  "SUCCESS",
+                  "FAILED"
+                ]
+              },
+              "projectCandidates": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "project": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9-]*$"
+                    },
+                    "officialName": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "introUrl": {
+                      "type": "string",
+                      "format": "uri",
+                      "pattern": "^https://[^/?#]+/"
+                    },
+                    "releaseCatalogCandidateUrl": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "uri",
+                          "pattern": "^https://[^/?#]+/"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "project",
+                    "officialName",
+                    "introUrl",
+                    "releaseCatalogCandidateUrl"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 1000
+              },
+              "releaseCandidates": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "versionText": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "exactVersion": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:\\.RELEASE)?$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "reportedChannel": {
+                      "enum": [
+                        "STABLE",
+                        "PREVIEW",
+                        "SNAPSHOT",
+                        "UNKNOWN"
+                      ]
+                    },
+                    "releaseUrl": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "uri",
+                          "pattern": "^https://[^/?#]+/"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "versionText",
+                    "exactVersion",
+                    "reportedChannel",
+                    "releaseUrl"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 1000
+              },
+              "errorCode": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "SCHEMA_UNSUPPORTED",
+                      "VALIDATION_FAILED",
+                      "ID_INPUT_CONFLICT",
+                      "NOT_FOUND",
+                      "AUTH_REQUIRED",
+                      "FORBIDDEN",
+                      "STALE_OWNER",
+                      "INVALID_TRANSITION",
+                      "INPUT_NOT_SEALED",
+                      "INPUT_INCOMPLETE",
+                      "HASH_MISMATCH",
+                      "COUNT_MISMATCH",
+                      "SCOPE_MISMATCH",
+                      "VERSION_UNVERIFIED",
+                      "SOURCE_UNAPPROVED",
+                      "ROBOTS_DENIED",
+                      "ROBOTS_UNREACHABLE",
+                      "URL_DENIED",
+                      "REDIRECT_DENIED",
+                      "RESPONSE_TOO_LARGE",
+                      "INVALID_BODY",
+                      "HTTP_CLIENT",
+                      "HTTP_RETRY_EXHAUSTED",
+                      "STORAGE_FAILED",
+                      "BUDGET_EXHAUSTED",
+                      "INTERNAL_ERROR",
+                      "APPLICABILITY_UNSUPPORTED"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "catalogKind",
+              "catalogSourceId",
+              "project",
+              "sourceUrl",
+              "observedAt",
+              "raw",
+              "outcome",
+              "projectCandidates",
+              "releaseCandidates",
+              "errorCode"
+            ],
+            "additionalProperties": false,
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "catalogKind": {
+                      "const": "PROJECT_CATALOG"
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "project": {
+                      "type": "null"
+                    },
+                    "releaseCandidates": {
+                      "maxItems": 0
+                    }
+                  }
+                },
+                "else": {
+                  "properties": {
+                    "project": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9-]*$"
+                    },
+                    "projectCandidates": {
+                      "maxItems": 0
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "outcome": {
+                      "const": "SUCCESS"
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "raw": {
+                      "$ref": "#/$defs/objectRef"
+                    },
+                    "errorCode": {
+                      "type": "null"
+                    }
+                  }
+                },
+                "else": {
+                  "properties": {
+                    "raw": {
+                      "type": "null"
+                    },
+                    "projectCandidates": {
+                      "maxItems": 0
+                    },
+                    "releaseCandidates": {
+                      "maxItems": 0
+                    },
+                    "errorCode": {
+                      "enum": [
+                        "SCHEMA_UNSUPPORTED",
+                        "VALIDATION_FAILED",
+                        "ID_INPUT_CONFLICT",
+                        "NOT_FOUND",
+                        "AUTH_REQUIRED",
+                        "FORBIDDEN",
+                        "STALE_OWNER",
+                        "INVALID_TRANSITION",
+                        "INPUT_NOT_SEALED",
+                        "INPUT_INCOMPLETE",
+                        "HASH_MISMATCH",
+                        "COUNT_MISMATCH",
+                        "SCOPE_MISMATCH",
+                        "VERSION_UNVERIFIED",
+                        "SOURCE_UNAPPROVED",
+                        "ROBOTS_DENIED",
+                        "ROBOTS_UNREACHABLE",
+                        "URL_DENIED",
+                        "REDIRECT_DENIED",
+                        "RESPONSE_TOO_LARGE",
+                        "INVALID_BODY",
+                        "HTTP_CLIENT",
+                        "HTTP_RETRY_EXHAUSTED",
+                        "STORAGE_FAILED",
+                        "BUDGET_EXHAUSTED",
+                        "INTERNAL_ERROR",
+                        "APPLICABILITY_UNSUPPORTED"
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "minItems": 1,
+          "maxItems": 100
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "requestId",
+        "runId",
+        "sourceRegistryHash",
+        "catalogs",
+        "createdAt"
+      ],
+      "additionalProperties": false
+    },
+    "packScope": {
+      "type": "object",
+      "properties": {
+        "project": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "exactVersion": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:\\.RELEASE)?$"
+        },
+        "applicability": {
+          "const": "EXACT_RELEASE"
+        }
+      },
+      "required": [
+        "project",
+        "exactVersion",
+        "applicability"
+      ],
+      "additionalProperties": false
+    },
+    "packProjection": {
+      "type": "object",
+      "properties": {
+        "packScope": {
+          "$ref": "#/$defs/packScope"
+        },
+        "inputScopeKey": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "observationSequence": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "packScope",
+        "inputScopeKey",
+        "observationSequence"
+      ],
+      "additionalProperties": false
+    },
+    "processProjection": {
+      "type": "object",
+      "properties": {
+        "packScope": {
+          "$ref": "#/$defs/packScope"
+        },
+        "inputScopeKey": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "observationSequence": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "expectedPublicationSequence": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "activationApprovalId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "packScope",
+        "inputScopeKey",
+        "observationSequence",
+        "expectedPublicationSequence",
+        "activationApprovalId"
+      ],
+      "additionalProperties": false
+    },
+    "observationNotice": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "noticeId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "runId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sourceRegistryHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "packScope": {
+          "$ref": "#/$defs/packScope"
+        },
+        "inputScopeKey": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "observationSequence": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "observedAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "noticeSequence": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "noticeId",
+        "runId",
+        "sourceRegistryHash",
+        "packScope",
+        "inputScopeKey",
+        "observationSequence",
+        "observedAt",
+        "noticeSequence"
+      ],
+      "additionalProperties": false
+    },
+    "observationAck": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "noticeId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "requestHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "duplicate": {
+          "type": "boolean"
+        },
+        "highestObservationSequence": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "noticeId",
+        "requestHash",
+        "duplicate",
+        "highestObservationSequence"
+      ],
+      "additionalProperties": false
+    },
+    "protectedObject": {
+      "type": "object",
+      "properties": {
+        "objectRef": {
+          "$ref": "#/$defs/objectRef"
+        },
+        "resourceRef": {
+          "$ref": "#/$defs/retentionResource"
+        }
+      },
+      "required": [
+        "objectRef",
+        "resourceRef"
+      ],
+      "additionalProperties": false
+    },
+    "readyRun": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "readyRunId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "readinessSequence": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "runId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "snapshotId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "discovery": {
+          "$ref": "#/$defs/objectRef"
+        },
+        "envelopes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/objectRef"
+          },
+          "minItems": 1,
+          "maxItems": 10000
+        },
+        "supplements": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/objectRef"
+          },
+          "minItems": 0,
+          "maxItems": 10000
+        },
+        "protectedObjects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/protectedObject"
+          },
+          "minItems": 1,
+          "maxItems": 100000
+        },
+        "projections": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/packProjection"
+          },
+          "minItems": 1,
+          "maxItems": 100
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "readyRunId",
+        "readinessSequence",
+        "runId",
+        "snapshotId",
+        "discovery",
+        "envelopes",
+        "supplements",
+        "protectedObjects",
+        "projections",
+        "createdAt"
+      ],
+      "additionalProperties": false
+    },
+    "readyRunsPage": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/readyRun"
+          },
+          "minItems": 0,
+          "maxItems": 20
+        },
+        "nextCursor": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "hasMore": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "items",
+        "nextCursor",
+        "hasMore"
+      ],
+      "additionalProperties": false
+    },
+    "processingRunResultReceipt": {
+      "type": "object",
+      "properties": {
+        "runInputSnapshotHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "projectionResults": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "properties": {
+              "packScope": {
+                "$ref": "#/$defs/packScope"
+              },
+              "state": {
+                "enum": [
+                  "SUCCEEDED",
+                  "FAILED_FINAL",
+                  "NEEDS_REVIEW",
+                  "CANCELLED"
+                ]
+              },
+              "buildId": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "buildJobId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "activationJobId": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "packScope",
+              "state",
+              "buildId",
+              "buildJobId",
+              "activationJobId"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "resultObjectRef": {
+          "$ref": "#/$defs/objectRef"
+        }
+      },
+      "required": [
+        "runInputSnapshotHash",
+        "projectionResults",
+        "resultObjectRef"
+      ],
+      "additionalProperties": false
+    },
+    "observationNoticesPage": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/observationNotice"
+          },
+          "minItems": 0,
+          "maxItems": 100
+        },
+        "nextCursor": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "hasMore": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "items",
+        "nextCursor",
+        "hasMore"
+      ],
+      "additionalProperties": false
+    },
+    "noPublicationObservation": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "resultKind": {
+          "const": "NO_PUBLICATION_OBSERVATION"
+        },
+        "reason": {
+          "const": "OPTIONAL_SCOPE_EMPTY"
+        },
+        "publicationEligible": {
+          "const": false
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "traceId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "runId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "snapshotId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "scopeHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "sourceRegistryHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "discovery": {
+          "$ref": "#/$defs/objectRef"
+        },
+        "targetCount": {
+          "const": 0
+        },
+        "batchCount": {
+          "const": 0
+        },
+        "requiredInputCount": {
+          "const": 0
+        },
+        "optionalInputCount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "projections": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/packProjection"
+          },
+          "minItems": 1,
+          "maxItems": 100
+        },
+        "observedAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "resultKind",
+        "reason",
+        "publicationEligible",
+        "requestId",
+        "traceId",
+        "runId",
+        "snapshotId",
+        "scopeHash",
+        "sourceRegistryHash",
+        "discovery",
+        "targetCount",
+        "batchCount",
+        "requiredInputCount",
+        "optionalInputCount",
+        "projections",
+        "observedAt"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/collectionRequest"
+    },
+    {
+      "$ref": "#/$defs/accept"
+    },
+    {
+      "$ref": "#/$defs/status"
+    },
+    {
+      "$ref": "#/$defs/discovery"
+    },
+    {
+      "$ref": "#/$defs/documentOutcome"
+    },
+    {
+      "$ref": "#/$defs/manifestEnvelope"
+    },
+    {
+      "$ref": "#/$defs/supplement"
+    },
+    {
+      "$ref": "#/$defs/processRequest"
+    },
+    {
+      "$ref": "#/$defs/error"
+    },
+    {
+      "$ref": "#/$defs/cancelRequest"
+    },
+    {
+      "$ref": "#/$defs/resumeRequest"
+    },
+    {
+      "$ref": "#/$defs/handoffAck"
+    },
+    {
+      "$ref": "#/$defs/versionCheckRequest"
+    },
+    {
+      "$ref": "#/$defs/versionCatalogResult"
+    },
+    {
+      "$ref": "#/$defs/noPublicationObservation"
+    }
+  ]
+}

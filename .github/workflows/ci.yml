@@ -47,3 +47,13 @@ jobs:
       - run: uv run ruff format --check
 
       - run: uv run pytest
+
+  contracts:
+    name: Contract checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.3.3
+
+      - run: uv run --no-project --python 3.13 --with jsonschema==4.26.0 python tools/check_contracts.py

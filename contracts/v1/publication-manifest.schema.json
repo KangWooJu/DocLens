@@ -1,0 +1,227 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "channelKey": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "publicationSequence": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "packId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "packType": {
+      "enum": [
+        "DOCUMENT",
+        "GRAPH"
+      ]
+    },
+    "project": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "exactVersion": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 2048
+    },
+    "supportedVersions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+      },
+      "maxItems": 256
+    },
+    "buildId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "packSchemaVersion": {
+      "const": 1
+    },
+    "objectKey": {
+      "type": "string",
+      "pattern": "^packs/[A-Za-z0-9@._/-]+$",
+      "maxLength": 1024
+    },
+    "checksum": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "sizeBytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 536870912
+    },
+    "embedding": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "modelKey": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "dimension": {
+              "const": 384
+            },
+            "encoding": {
+              "const": "float32-le"
+            }
+          },
+          "required": [
+            "modelKey",
+            "dimension",
+            "encoding"
+          ]
+        }
+      ]
+    },
+    "processingConfigHash": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "sourceSnapshotIds": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256
+      },
+      "maxItems": 10000
+    },
+    "releaseSet": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "packId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "buildId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "checksum": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "referenceMode": {
+            "enum": [
+              "CHUNK",
+              "SOURCE_ONLY"
+            ]
+          }
+        },
+        "required": [
+          "packId",
+          "buildId",
+          "checksum",
+          "referenceMode"
+        ]
+      },
+      "maxItems": 256
+    },
+    "publishedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "inputSnapshotHash": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "channelKey",
+    "publicationSequence",
+    "packId",
+    "packType",
+    "project",
+    "exactVersion",
+    "supportedVersions",
+    "buildId",
+    "packSchemaVersion",
+    "objectKey",
+    "checksum",
+    "sizeBytes",
+    "embedding",
+    "inputSnapshotHash",
+    "processingConfigHash",
+    "sourceSnapshotIds",
+    "releaseSet",
+    "publishedAt"
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:doclens:publication-manifest:1",
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "packType": {
+            "const": "DOCUMENT"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "exactVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "supportedVersions": {
+            "minItems": 1,
+            "maxItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "packType": {
+            "const": "GRAPH"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "exactVersion": {
+            "type": "null"
+          },
+          "supportedVersions": {
+            "minItems": 2
+          }
+        }
+      }
+    }
+  ]
+}
