@@ -1,0 +1,45 @@
+plugins {
+    alias(libs.plugins.spring.boot) apply false
+}
+
+subprojects {
+    apply(plugin = "java")
+
+    extensions.configure<JavaPluginExtension> {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(21)
+        }
+    }
+
+    repositories {
+        mavenCentral()
+    }
+
+    dependencies {
+        "implementation"(platform(rootProject.libs.spring.boot.dependencies))
+        "testImplementation"("org.junit.jupiter:junit-jupiter")
+        "testRuntimeOnly"("org.junit.platform:junit-platform-launcher")
+    }
+
+    tasks.withType<JavaCompile>().configureEach {
+        options.encoding = "UTF-8"
+        options.compilerArgs.add("-parameters")
+    }
+
+    tasks.named<Test>("test") {
+        useJUnitPlatform {
+            excludeTags("external")
+        }
+    }
+
+    // Real external calls (managed PG, real S3, third-party APIs): run on demand only.
+    tasks.register<Test>("externalTest") {
+        description = "Runs tests tagged external."
+        group = "verification"
+        testClassesDirs = project.the<SourceSetContainer>()["test"].output.classesDirs
+        classpath = project.the<SourceSetContainer>()["test"].runtimeClasspath
+        useJUnitPlatform {
+            includeTags("external")
+        }
+    }
+}
