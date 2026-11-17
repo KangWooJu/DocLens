@@ -2,15 +2,12 @@ package io.github.kangwooju.doclens.core.pack;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
+import java.io.UncheckedIOException;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.security.DigestInputStream;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -19,7 +16,6 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Arrays;
 import java.util.HashSet;
-import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -213,11 +209,11 @@ public final class PackWriter implements AutoCloseable {
 
             return new PackWriteResult(
                     target,
-                    sha256Of(target),
+                    PackFiles.sha256(target),
                     size,
                     logicalContentSha256
             );
-        } catch (SQLException | IOException | PackWriteException exception) {
+        } catch (SQLException | IOException | UncheckedIOException | PackWriteException exception) {
             closeStatementsAndConnection();
             deleteQuietly(target);
 
@@ -527,26 +523,6 @@ public final class PackWriter implements AutoCloseable {
                 StandardOpenOption.WRITE
         )) {
             channel.force(true);
-        }
-    }
-
-    private static String sha256Of(Path path) throws IOException {
-
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-
-            try (InputStream in = new DigestInputStream(
-                    Files.newInputStream(path),
-                    digest
-            )) {
-                in.transferTo(OutputStream.nullOutputStream());
-            }
-
-            return "sha256:" + HexFormat
-                    .of()
-                    .formatHex(digest.digest());
-        } catch (NoSuchAlgorithmException exception) {
-            throw new IllegalStateException(exception);
         }
     }
 
