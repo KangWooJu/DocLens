@@ -11,10 +11,11 @@ import java.util.List;
 import io.github.kangwooju.doclens.core.json.CanonicalJson;
 
 /**
- * 시험용 작은 Pack 생성기(pipeline·mcp-server 시험 공유).
+ * 시험용 작은 Pack 생성기(pipeline·mcp-server 시험 공유)
  *
- * <p>문서마다 섹션 하나, 청크는 넣은 순서대로. ID는 seed의 SHA-256으로 결정적.
- * 문서는 documentId 순서로 정렬해 Writer에 넘김.
+ * <p>문서마다 섹션 하나, 청크는 넣은 순서 유지
+ * ID는 seed의 SHA-256 기반 결정적 값
+ * 문서는 documentId 순서 정렬 후 Writer 전달
  */
 public final class TestPacks {
 
@@ -28,13 +29,14 @@ public final class TestPacks {
         return new Builder();
     }
 
-    /** seed로 만든 결정적 `sha256:` ID. */
+    /** seed 기반 결정적 `sha256:` ID */
     public static String id(String seed) {
 
         try {
             byte[] digest = MessageDigest
                     .getInstance("SHA-256")
-                    .digest(seed.getBytes(StandardCharsets.UTF_8));
+                    .digest(seed
+                            .getBytes(StandardCharsets.UTF_8));
 
             return "sha256:" + HexFormat
                     .of()
@@ -44,7 +46,7 @@ public final class TestPacks {
         }
     }
 
-    /** 시험용 메타데이터. */
+    /** 시험용 메타데이터 */
     public static PackMeta meta(String buildId) {
 
         return new PackMeta(
@@ -57,7 +59,8 @@ public final class TestPacks {
                 "parser-test-1",
                 "chunker-test-1",
                 "Spring documentation, Apache-2.0",
-                List.of(id("source-snapshot")),
+                List
+                        .of(id("source-snapshot")),
                 "test-packs"
         );
     }
@@ -76,10 +79,11 @@ public final class TestPacks {
             return this;
         }
 
-        /** 새 문서를 시작. 이후 chunk는 이 문서에 들어감. */
+        /** 새 문서 시작, 이후 chunk의 소속 문서 */
         public Builder document(String key) {
 
-            documents.add(new DocumentDraft(key));
+            documents
+                    .add(new DocumentDraft(key));
             return this;
         }
 
@@ -87,7 +91,8 @@ public final class TestPacks {
 
             return chunk(
                     content,
-                    List.of()
+                    List
+                            .of()
             );
         }
 
@@ -96,7 +101,8 @@ public final class TestPacks {
                 List<String> identifiers
         ) {
 
-            if (documents.isEmpty()) {
+            if (documents
+                    .isEmpty()) {
                 throw new IllegalStateException("call document(key) before chunk(content)");
             }
 
@@ -105,35 +111,42 @@ public final class TestPacks {
                     .chunks()
                     .add(new ChunkDraft(
                             content,
-                            List.copyOf(identifiers)
+                            List
+                                    .copyOf(identifiers)
                     ));
             return this;
         }
 
-        /** Writer에 넘길 문서들(documentId 순서). */
+        /** Writer 전달용 문서 목록(documentId 순서) */
         public List<PackDocument> documents() {
 
             return documents
                     .stream()
                     .map(DocumentDraft::toDocument)
-                    .sorted((left, right) -> CanonicalJson.compareCodePoints(
-                            left.documentId(),
-                            right.documentId()
-                    ))
+                    .sorted((left, right) -> CanonicalJson
+                            .compareCodePoints(
+                                    left
+                                            .documentId(),
+                                    right
+                                            .documentId()
+                            ))
                     .toList();
         }
 
-        /** directory 아래 `test.pack`으로 써서 결과를 돌려줌. */
+        /** directory 아래 `test.pack` 쓰기와 결과 반환 */
         public PackWriteResult writeTo(Path directory) {
 
-            try (PackWriter writer = PackWriter.create(
-                    directory.resolve("test.pack"),
-                    meta(buildId)
-            )) {
+            try (PackWriter writer = PackWriter
+                    .create(
+                            directory
+                                    .resolve("test.pack"),
+                            meta(buildId)
+                    )) {
                 documents()
                         .forEach(writer::add);
 
-                return writer.finish();
+                return writer
+                        .finish();
             }
         }
     }
@@ -155,20 +168,28 @@ public final class TestPacks {
 
             String sectionId = id("section:" + key);
             List<PackChunk> packChunks = new ArrayList<>();
+            int chunkCount = chunks
+                    .size();
 
-            for (int ordinal = 0; ordinal < chunks.size(); ordinal++) {
-                ChunkDraft chunk = chunks.get(ordinal);
-                packChunks.add(new PackChunk(
-                        id("chunk:" + key + ":" + ordinal),
-                        ordinal,
-                        chunk.content(),
-                        key,
-                        "[]",
-                        "{}",
-                        List.of(),
-                        chunk.identifiers(),
-                        List.of()
-                ));
+            for (int ordinal = 0; ordinal < chunkCount; ordinal++) {
+                ChunkDraft chunk = chunks
+                        .get(ordinal);
+                packChunks
+                        .add(new PackChunk(
+                                id("chunk:" + key + ":" + ordinal),
+                                ordinal,
+                                chunk
+                                        .content(),
+                                key,
+                                "[]",
+                                "{}",
+                                List
+                                        .of(),
+                                chunk
+                                        .identifiers(),
+                                List
+                                        .of()
+                        ));
             }
 
             return new PackDocument(
@@ -180,14 +201,16 @@ public final class TestPacks {
                     id("source-snapshot"),
                     id("raw:" + key),
                     "{}",
-                    List.of(new PackSection(
-                            sectionId,
-                            null,
-                            null,
-                            List.of(key),
-                            0,
-                            packChunks
-                    ))
+                    List
+                            .of(new PackSection(
+                                    sectionId,
+                                    null,
+                                    null,
+                                    List
+                                            .of(key),
+                                    0,
+                                    packChunks
+                            ))
             );
         }
     }
