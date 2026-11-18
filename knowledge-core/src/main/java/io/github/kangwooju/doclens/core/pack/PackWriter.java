@@ -156,6 +156,7 @@ public final class PackWriter implements AutoCloseable {
         documentCount++;
     }
 
+    // 문서 순서(documentId 오름차순)와 문서 버전 일치 검사
     private void requireOrderAndVersion(PackDocument document) {
 
         if (lastDocumentId != null
@@ -256,6 +257,7 @@ public final class PackWriter implements AutoCloseable {
         deleteQuietly(target);
     }
 
+    // documents 행 저장
     private void insertDocument(PackDocument document) throws SQLException {
 
         insertDocument
@@ -314,6 +316,7 @@ public final class PackWriter implements AutoCloseable {
                 .executeUpdate();
     }
 
+    // 섹션 저장, ordinal 순서·ID 중복·부모 선언 순서 검사
     private void insertSections(PackDocument document) throws SQLException {
 
         Set<String> sectionsSoFar = new HashSet<>();
@@ -397,6 +400,7 @@ public final class PackWriter implements AutoCloseable {
         }
     }
 
+    // 청크 저장, ordinal 순서 검사와 하위 행 저장
     private void insertChunks(
             PackDocument document,
             PackSection section
@@ -497,6 +501,7 @@ public final class PackWriter implements AutoCloseable {
         }
     }
 
+    // 코드 변형 저장, 블록마다 기본 변형 1개 검사
     private void insertVariants(
             PackChunk chunk,
             long rowid
@@ -586,6 +591,7 @@ public final class PackWriter implements AutoCloseable {
                 });
     }
 
+    // 청크 식별자 저장
     private void insertIdentifiers(
             PackChunk chunk,
             long rowid
@@ -608,6 +614,7 @@ public final class PackWriter implements AutoCloseable {
         }
     }
 
+    // 청크 문서 링크 저장
     private void insertLinks(
             PackChunk chunk,
             long rowid
@@ -637,6 +644,7 @@ public final class PackWriter implements AutoCloseable {
         }
     }
 
+    // pack_meta 16개 키 저장(logicalContentSha256 제외)
     private void writeMeta() throws SQLException {
 
         Map<String, Object> values = new LinkedHashMap<>();
@@ -749,6 +757,7 @@ public final class PackWriter implements AutoCloseable {
         }
     }
 
+    // pack_meta 키 하나의 canonical JSON 값 저장
     private void insertMeta(
             String key,
             String jsonValue
@@ -771,6 +780,7 @@ public final class PackWriter implements AutoCloseable {
         }
     }
 
+    // FTS 재구성·검사, foreign_key_check·integrity_check, 행 수 확인
     private void verifyDatabase() throws SQLException {
 
         try (Statement statement = connection
@@ -815,6 +825,7 @@ public final class PackWriter implements AutoCloseable {
         }
     }
 
+    // 조회 결과 개수와 기대값 일치 검사
     private static void requireCount(
             Statement statement,
             String sql,
@@ -834,6 +845,7 @@ public final class PackWriter implements AutoCloseable {
         }
     }
 
+    // journal·WAL·SHM 부속 파일 부재 확인
     private void verifyNoSideFiles() {
 
         for (String suffix : SIDE_FILES) {
@@ -848,6 +860,7 @@ public final class PackWriter implements AutoCloseable {
         }
     }
 
+    // Pack 파일 내용의 디스크 기록 강제
     private void fsync() throws IOException {
 
         try (FileChannel channel = FileChannel
@@ -861,6 +874,7 @@ public final class PackWriter implements AutoCloseable {
         }
     }
 
+    // JSON 컬럼 값의 canonical 변환, 잘못된 JSON 거절
     private static String canonicalJsonColumn(
             String json,
             String name
@@ -878,6 +892,7 @@ public final class PackWriter implements AutoCloseable {
         }
     }
 
+    // 리소스 DDL 파일의 문장 단위 분리
     private static List<String> ddlStatements() throws IOException {
 
         try (InputStream in = PackWriter.class
@@ -902,6 +917,7 @@ public final class PackWriter implements AutoCloseable {
         }
     }
 
+    // SQLite 제약 위반의 PackWriteException 변환
     private PackWriteException rejected(
             String what,
             SQLException exception
@@ -914,6 +930,7 @@ public final class PackWriter implements AutoCloseable {
         );
     }
 
+    // 완결·종료 뒤 사용 거절
     private void requireOpen() {
 
         if (finished) {
@@ -921,6 +938,7 @@ public final class PackWriter implements AutoCloseable {
         }
     }
 
+    // 준비된 문장과 연결 종료
     private void closeStatementsAndConnection() {
 
         for (Statement statement : List
@@ -938,6 +956,7 @@ public final class PackWriter implements AutoCloseable {
         closeQuietly(connection);
     }
 
+    // 예외 없는 자원 닫기
     private static void closeQuietly(AutoCloseable closeable) {
 
         if (closeable == null) {
@@ -952,6 +971,7 @@ public final class PackWriter implements AutoCloseable {
         }
     }
 
+    // 예외 없는 미완성 파일 삭제
     private static void deleteQuietly(Path path) {
 
         try {

@@ -231,6 +231,7 @@ class PackReaderTests {
         );
     }
 
+    // 시험용 정상 Pack 생성
     private PackWriteResult writeSample() {
 
         return TestPacks
@@ -247,7 +248,7 @@ class PackReaderTests {
                 .writeTo(directory);
     }
 
-    /** 새로 만든 정상 Pack을 SQL로 망가뜨린 사본 */
+    // 새로 만든 정상 Pack을 SQL로 망가뜨린 사본
     private Path tampered(
             String name,
             String... statements
@@ -283,6 +284,7 @@ class PackReaderTests {
         }
     }
 
+    // 열기 거절과 거절 이유 확인
     private static void assertReason(
             Reason expected,
             Path pack

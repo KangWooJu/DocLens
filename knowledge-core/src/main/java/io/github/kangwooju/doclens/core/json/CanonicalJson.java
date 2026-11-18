@@ -78,6 +78,7 @@ public final class CanonicalJson {
         }
     }
 
+    // 값 종류별 canonical JSON 출력 분기
     private static void append(
             StringBuilder out,
             Object value
@@ -118,6 +119,7 @@ public final class CanonicalJson {
         }
     }
 
+    // code point 순서로 정렬한 키의 객체 출력
     private static void appendObject(
             StringBuilder out,
             Map<?, ?> map
@@ -170,6 +172,7 @@ public final class CanonicalJson {
                 .append('}');
     }
 
+    // 배열 요소의 순서 그대로 출력
     private static void appendArray(
             StringBuilder out,
             List<?> list
@@ -198,6 +201,7 @@ public final class CanonicalJson {
                 .append(']');
     }
 
+    // 최소 escape 문자열 출력, 짝 없는 surrogate 거절
     private static void appendString(
             StringBuilder out,
             String text
