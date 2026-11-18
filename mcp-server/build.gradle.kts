@@ -18,6 +18,7 @@ dependencies {
     annotationProcessor("org.projectlombok:lombok")
 
     testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation(testFixtures(project(":knowledge-core")))
     testImplementation(libs.archunit.junit5)
 }
 
