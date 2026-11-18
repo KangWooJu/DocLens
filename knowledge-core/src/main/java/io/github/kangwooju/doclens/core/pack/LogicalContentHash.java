@@ -20,21 +20,22 @@ import java.util.stream.Collectors;
 import io.github.kangwooju.doclens.core.json.CanonicalJson;
 
 /**
- * Pack 논리 내용 해시(logicalContentSha256).
+ * Pack 논리 내용 해시(logicalContentSha256)
  *
- * <p>정해진 테이블 순서와 PK(BINARY) 순서로 모든 행을 읽어 한 행당
- * `{"row":{...},"table":"..."}` canonical JSON 한 줄(LF 종료)로 만든 뒤 SHA-256.
- * 같은 내용이면 buildId·파일 경로·물리 바이트와 무관하게 같은 값.
+ * <p>정해진 테이블 순서와 PK(BINARY) 순서로 읽은 모든 행을 한 행당
+ * `{"row":{...},"table":"..."}` canonical JSON 한 줄(LF 종료)로 만든 뒤의 SHA-256
+ * 같은 내용이면 buildId·파일 경로·물리 바이트와 무관한 같은 값
  *
- * <p>제외: pack_meta의 buildId(무작위)와 logicalContentSha256 자신, 파생 색인 chunks_fts.
- * BLOB은 소문자 hex 문자열로 표현.
+ * <p>제외: pack_meta의 buildId(무작위)와 logicalContentSha256 자신, 파생 색인 chunks_fts
+ * BLOB은 소문자 hex 문자열로 표현
  */
 final class LogicalContentHash {
 
-    private static final Set<String> EXCLUDED_META_KEYS = Set.of(
-            "buildId",
-            "logicalContentSha256"
-    );
+    private static final Set<String> EXCLUDED_META_KEYS = Set
+            .of(
+                    "buildId",
+                    "logicalContentSha256"
+            );
 
     private static final Map<String, String> TABLE_QUERIES = orderedQueries();
 
@@ -45,12 +46,17 @@ final class LogicalContentHash {
 
         MessageDigest digest = newDigest();
 
-        try (Statement statement = connection.createStatement()) {
-            for (Map.Entry<String, String> table : TABLE_QUERIES.entrySet()) {
-                try (ResultSet rows = statement.executeQuery(table.getValue())) {
+        try (Statement statement = connection
+                .createStatement()) {
+            for (Map.Entry<String, String> table : TABLE_QUERIES
+                    .entrySet()) {
+                try (ResultSet rows = statement
+                        .executeQuery(table
+                                .getValue())) {
                     digestRows(
                             digest,
-                            table.getKey(),
+                            table
+                                    .getKey(),
                             rows
                     );
                 }
@@ -59,7 +65,8 @@ final class LogicalContentHash {
 
         return "sha256:" + HexFormat
                 .of()
-                .formatHex(digest.digest());
+                .formatHex(digest
+                        .digest());
     }
 
     private static void digestRows(
@@ -68,33 +75,46 @@ final class LogicalContentHash {
             ResultSet rows
     ) throws SQLException {
 
-        ResultSetMetaData columns = rows.getMetaData();
+        ResultSetMetaData columns = rows
+                .getMetaData();
 
-        while (rows.next()) {
+        while (rows
+                .next()) {
             Map<String, Object> row = new LinkedHashMap<>();
+            int columnCount = columns
+                    .getColumnCount();
 
-            for (int index = 1; index <= columns.getColumnCount(); index++) {
-                row.put(
-                        columns.getColumnLabel(index),
-                        columnValue(
-                                rows,
-                                index
-                        )
-                );
+            for (int index = 1; index <= columnCount; index++) {
+                row
+                        .put(
+                                columns
+                                        .getColumnLabel(index),
+                                columnValue(
+                                        rows,
+                                        index
+                                )
+                        );
             }
 
-            if ("pack_meta".equals(table)
-                    && EXCLUDED_META_KEYS.contains((String) row.get("key"))) {
+            if ("pack_meta"
+                    .equals(table)
+                    && EXCLUDED_META_KEYS
+                            .contains((String) row
+                                    .get("key"))) {
                 continue;
             }
 
-            String line = CanonicalJson.write(Map.of(
-                    "table",
-                    table,
-                    "row",
-                    row
-            )) + "\n";
-            digest.update(line.getBytes(StandardCharsets.UTF_8));
+            String line = CanonicalJson
+                    .write(Map
+                            .of(
+                                    "table",
+                                    table,
+                                    "row",
+                                    row
+                            )) + "\n";
+            digest
+                    .update(line
+                            .getBytes(StandardCharsets.UTF_8));
         }
     }
 
@@ -103,7 +123,8 @@ final class LogicalContentHash {
             int index
     ) throws SQLException {
 
-        Object value = rows.getObject(index);
+        Object value = rows
+                .getObject(index);
 
         if (value == null) {
             return null;
@@ -115,14 +136,17 @@ final class LogicalContentHash {
                 || value instanceof byte[]) {
             return HexFormat
                     .of()
-                    .formatHex(rows.getBytes(index));
+                    .formatHex(rows
+                            .getBytes(index));
         }
 
         if (value instanceof Number number) {
-            return number.longValue();
+            return number
+                    .longValue();
         }
 
-        return value.toString();
+        return value
+                .toString();
     }
 
     private static Map<String, String> orderedQueries() {
@@ -141,15 +165,19 @@ final class LogicalContentHash {
                         "vector_omissions|chunk_rowid"
                 )
                 .forEach(spec -> {
-                    String[] parts = spec.split("\\|");
+                    String[] parts = spec
+                            .split("\\|");
                     String order = Arrays
-                            .stream(parts[1].split(",\\s*"))
+                            .stream(parts[1]
+                                    .split(",\\s*"))
                             .map(column -> column + " COLLATE BINARY")
-                            .collect(Collectors.joining(", "));
-                    queries.put(
-                            parts[0],
-                            "SELECT * FROM " + parts[0] + " ORDER BY " + order
-                    );
+                            .collect(Collectors
+                                    .joining(", "));
+                    queries
+                            .put(
+                                    parts[0],
+                                    "SELECT * FROM " + parts[0] + " ORDER BY " + order
+                            );
                 });
 
         return queries;
@@ -158,7 +186,8 @@ final class LogicalContentHash {
     private static MessageDigest newDigest() {
 
         try {
-            return MessageDigest.getInstance("SHA-256");
+            return MessageDigest
+                    .getInstance("SHA-256");
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException(exception);
         }

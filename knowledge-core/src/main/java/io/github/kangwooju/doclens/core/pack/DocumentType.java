@@ -1,6 +1,6 @@
 package io.github.kangwooju.doclens.core.pack;
 
-/** Pack·Tool의 소문자 문서 유형 10종(수집의 대문자 유형과 전수 대응). */
+/** Pack·Tool의 소문자 문서 유형 10종(수집의 대문자 유형과 전수 대응) */
 public enum DocumentType {
 
     REFERENCE("reference"),
@@ -21,7 +21,7 @@ public enum DocumentType {
         this.wireValue = wireValue;
     }
 
-    /** Pack에 저장하는 값. */
+    /** Pack에 저장하는 값 */
     public String wireValue() {
 
         return wireValue;

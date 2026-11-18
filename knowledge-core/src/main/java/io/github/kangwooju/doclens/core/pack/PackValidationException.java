@@ -1,9 +1,9 @@
 package io.github.kangwooju.doclens.core.pack;
 
-/** Pack을 열거나 검증할 수 없음. reason으로 원인 종류를 구별. */
+/** Pack 열기 또는 검증 실패, reason으로 원인 종류 구별 */
 public class PackValidationException extends RuntimeException {
 
-    /** 거절 원인. */
+    /** 거절 원인 */
     public enum Reason {
         NOT_A_FILE,
         NOT_A_PACK,
