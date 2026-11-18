@@ -8,6 +8,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
 
@@ -22,6 +24,47 @@ class PackReaderTests {
 
     @TempDir
     Path directory;
+
+    @Test
+    @DisplayName("검증된 연결의 콜백 조회와 쓰기 거절")
+    void runsReadOnlyQueries() throws Exception {
+
+        PackWriteResult written = writeSample();
+
+        try (PackReader reader = PackReader
+                .open(written
+                        .path())) {
+            long chunks = reader
+                    .query(connection -> {
+                        try (Statement statement = connection
+                                .createStatement();
+                             ResultSet rows = statement
+                                     .executeQuery("SELECT count(*) FROM chunks")) {
+                            rows
+                                    .next();
+
+                            return rows
+                                    .getLong(1);
+                        }
+                    });
+
+            assertEquals(
+                    3,
+                    chunks
+            );
+            assertThrows(
+                    SQLException.class,
+                    () -> reader
+                            .query(connection -> {
+                                try (Statement statement = connection
+                                        .createStatement()) {
+                                    return statement
+                                            .executeUpdate("DELETE FROM chunks");
+                                }
+                            })
+            );
+        }
+    }
 
     @Test
     @DisplayName("정상 Pack의 변경 없는 열기와 메타데이터 조회")
