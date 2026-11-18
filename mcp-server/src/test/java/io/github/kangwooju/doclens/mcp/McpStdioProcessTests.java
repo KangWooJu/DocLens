@@ -164,9 +164,10 @@ class McpStdioProcessTests {
         long actualWireBytes = statusLine
                 .getBytes(StandardCharsets.UTF_8).length + 1L;
 
-        assertTrue(
-                actualWireBytes <= reportedWireBytes,
-                "reported wireBytes must bound the real stdout line"
+        assertEquals(
+                actualWireBytes,
+                reportedWireBytes,
+                "reported wireBytes must equal the real stdout line"
         );
         assertEquals(
                 (reportedWireBytes + 2) / 3,
@@ -178,36 +179,32 @@ class McpStdioProcessTests {
                 .at("/budget/estimatedTokens")
                 .asLong() <= 4096);
 
-        JsonNode tooSmall = request(
+        JsonNode atMinimum = request(
                 stdin,
                 stdout,
                 "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\",\"params\":"
                         + "{\"name\":\"get_status\",\"arguments\":{\"maxContextTokens\":256}}}"
         );
-        JsonNode budgetError = tooSmall
+        JsonNode minimum = atMinimum
                 .at("/result/structuredContent");
 
-        assertTrue(tooSmall
-                .at("/result/isError")
-                .asBoolean());
-        assertEquals(
-                "BUDGET_TOO_SMALL",
-                budgetError
-                        .at("/code")
-                        .asString()
+        assertFalse(
+                atMinimum
+                        .at("/result/isError")
+                        .asBoolean(),
+                "get_status must fit the minimum budget with an integer id"
         );
-        assertTrue(budgetError
-                .at("/minBudget")
-                .asLong() > 256);
+        assertTrue(minimum
+                .at("/budget/estimatedTokens")
+                .asLong() <= 256);
         assertEquals(
-                256,
-                budgetError
-                        .at("/inputMinBudget")
-                        .asInt()
+                stdoutLines
+                        .getLast()
+                        .getBytes(StandardCharsets.UTF_8).length + 1L,
+                minimum
+                        .at("/budget/wireBytes")
+                        .asLong()
         );
-        assertFalse(budgetError
-                .at("/unservableAtHardCap")
-                .asBoolean());
 
         JsonNode invalid = request(
                 stdin,
@@ -266,6 +263,52 @@ class McpStdioProcessTests {
                 .isRegularFile(log));
         assertTrue(Files
                 .size(log) > 0);
+    }
+
+    @Test
+    @DisplayName("해석 불가 입력 줄의 세션 종료와 프로세스 정상 종료(SDK 2.1.0 제약, java-sdk PR #1173 병합 시 변경)")
+    void malformedLineEndsSessionAndProcess() throws Exception {
+
+        process = start();
+        BufferedReader stdout = new BufferedReader(new InputStreamReader(
+                process
+                        .getInputStream(),
+                StandardCharsets.UTF_8
+        ));
+        OutputStream stdin = process
+                .getOutputStream();
+
+        request(
+                stdin,
+                stdout,
+                "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":"
+                        + "{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{},"
+                        + "\"clientInfo\":{\"name\":\"test\",\"version\":\"1\"}}}"
+        );
+        send(
+                stdin,
+                "{not json"
+        );
+
+        assertTrue(
+                process
+                        .waitFor(
+                                RESPONSE_TIMEOUT_SECONDS,
+                                TimeUnit.SECONDS
+                        ),
+                "server must exit after the SDK closes the session"
+        );
+        assertEquals(
+                0,
+                process
+                        .exitValue()
+        );
+        assertEquals(
+                null,
+                stdout
+                        .readLine(),
+                "no parse error response is written by SDK 2.1.0"
+        );
     }
 
     // 캐시 루트를 임시 디렉터리로 지정한 서버 자식 프로세스

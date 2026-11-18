@@ -50,7 +50,10 @@ class ToolResponsesTests {
                 .isError());
         assertEquals(
                 toolResponses
-                        .wireBytes(result),
+                        .wireBytes(
+                                result,
+                                ToolResponses.RESERVED_ID
+                        ),
                 success
                         .budget()
                         .wireBytes()
@@ -73,6 +76,80 @@ class ToolResponsesTests {
                                 Map.class
                         )
                         .get("text")
+        );
+    }
+
+    @Test
+    @DisplayName("실제 id 기준 예산 재계산: 짧은 정수 id의 정확한 wireBytes, 긴 문자열 id의 예산 초과 처리")
+    void finalizesBudgetForRealRequestId() {
+
+        CallToolResult reserved = toolResponses
+                .success(
+                        Readiness.NOT_READY,
+                        null,
+                        List
+                                .of(Map
+                                        .of(
+                                                "kind",
+                                                "STATUS"
+                                        )),
+                        ToolArguments.MIN_BUDGET
+                );
+        CallToolResult forSmallId = toolResponses
+                .finalizeFor(
+                        reserved,
+                        7
+                );
+        ToolSuccess exact = (ToolSuccess) forSmallId
+                .structuredContent();
+
+        assertFalse(forSmallId
+                .isError());
+        assertEquals(
+                toolResponses
+                        .wireBytes(
+                                forSmallId,
+                                7
+                        ),
+                exact
+                        .budget()
+                        .wireBytes()
+        );
+        assertTrue(exact
+                .budget()
+                .wireBytes() < ((ToolSuccess) reserved
+                        .structuredContent())
+                        .budget()
+                        .wireBytes());
+
+        String exoticId = "x"
+                .repeat(2000);
+        CallToolResult forExoticId = toolResponses
+                .finalizeFor(
+                        reserved,
+                        exoticId
+                );
+
+        assertTrue(forExoticId
+                .isError());
+        assertEquals(
+                ToolErrorCode.BUDGET_TOO_SMALL,
+                ((ToolError) forExoticId
+                        .structuredContent())
+                        .code()
+        );
+
+        CallToolResult error = toolResponses
+                .error(ToolError
+                        .of(ToolErrorCode.NOT_READY));
+
+        assertEquals(
+                error,
+                toolResponses
+                        .finalizeFor(
+                                error,
+                                exoticId
+                        )
         );
     }
 

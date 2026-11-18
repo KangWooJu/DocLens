@@ -59,7 +59,9 @@ class McpServerApplicationTests {
 
             return new ProtocolStreams(
                     new ByteArrayInputStream(new byte[0]),
-                    new ByteArrayOutputStream()
+                    new ByteArrayOutputStream(),
+                    () -> {
+                    }
             );
         }
     }
