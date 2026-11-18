@@ -1,6 +1,6 @@
 package io.github.kangwooju.doclens.core.pack;
 
-/** 코드 탭 그룹의 종류. */
+/** 코드 탭 그룹의 종류 */
 public enum VariantGroupType {
 
     LANGUAGE("language"),
@@ -16,7 +16,7 @@ public enum VariantGroupType {
         this.wireValue = wireValue;
     }
 
-    /** Pack에 저장하는 값. */
+    /** Pack에 저장하는 값 */
     public String wireValue() {
 
         return wireValue;

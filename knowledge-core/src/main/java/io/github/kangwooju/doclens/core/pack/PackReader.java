@@ -23,43 +23,46 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * 검증한 뒤 읽기 전용으로 여는 Pack Reader(Reader 버전 1).
+ * 검증 후 읽기 전용으로 여는 Pack Reader(Reader 버전 1)
  *
- * <p>읽기 전용 열기, query_only, 확장 로드 금지, busy_timeout 1000ms.
- * 열면서 파일을 바꾸지 않음. 검색 API는 mcp-server 단계(F12)에서 추가.
+ * <p>읽기 전용 열기, query_only, 확장 로드 금지, busy_timeout 1000ms, 파일 변경 없는 열기
+ * 검색 API는 mcp-server 단계(F12)에서 추가
  */
 public final class PackReader implements AutoCloseable {
 
-    /** 이 Reader가 이해하는 Pack schema와 Reader 버전. */
+    /** 이 Reader가 이해하는 Pack schema와 Reader 버전 */
     public static final int READER_VERSION = 1;
 
     private static final long APPLICATION_ID = 1397771083L;
     private static final int BUSY_TIMEOUT_MILLIS = 1000;
-    private static final Set<String> REQUIRED_META_KEYS = Set.of(
-            "packId",
-            "packType",
-            "project",
-            "docVersion",
-            "buildId",
-            "packSchemaVersion",
-            "minReaderVersion",
-            "inputSnapshotHash",
-            "processingConfigHash",
-            "parserPolicyVersion",
-            "chunkerPolicyVersion",
-            "sourceAttribution",
-            "sourceSnapshotIds",
-            "logicalContentSha256",
-            "capabilities",
-            "embedding",
-            "createdBy"
-    );
-    private static final Set<String> KNOWN_CAPABILITIES = Set.of(
-            "BM25",
-            "SECTIONS",
-            "VARIANTS"
-    );
-    private static final Pattern FIRST_TOKEN = Pattern.compile("[\\p{L}\\p{N}]+");
+    private static final Set<String> REQUIRED_META_KEYS = Set
+            .of(
+                    "packId",
+                    "packType",
+                    "project",
+                    "docVersion",
+                    "buildId",
+                    "packSchemaVersion",
+                    "minReaderVersion",
+                    "inputSnapshotHash",
+                    "processingConfigHash",
+                    "parserPolicyVersion",
+                    "chunkerPolicyVersion",
+                    "sourceAttribution",
+                    "sourceSnapshotIds",
+                    "logicalContentSha256",
+                    "capabilities",
+                    "embedding",
+                    "createdBy"
+            );
+    private static final Set<String> KNOWN_CAPABILITIES = Set
+            .of(
+                    "BM25",
+                    "SECTIONS",
+                    "VARIANTS"
+            );
+    private static final Pattern FIRST_TOKEN = Pattern
+            .compile("[\\p{L}\\p{N}]+");
     private static final JsonMapper JSON_MAPPER = JsonMapper
             .builder()
             .build();
@@ -76,13 +79,14 @@ public final class PackReader implements AutoCloseable {
         this.info = info;
     }
 
-    /** Pack 파일을 읽기 전용으로 열고 전부 검증. 실패하면 이유와 함께 거절. */
+    /** Pack 파일 읽기 전용 열기와 전체 검증, 실패 시 이유와 함께 거절 */
     public static PackReader open(Path packFile) {
 
-        if (!Files.isRegularFile(
-                packFile,
-                LinkOption.NOFOLLOW_LINKS
-        )) {
+        if (!Files
+                .isRegularFile(
+                        packFile,
+                        LinkOption.NOFOLLOW_LINKS
+                )) {
             throw new PackValidationException(
                     Reason.NOT_A_FILE,
                     "not a regular file (symbolic links are refused): " + packFile
@@ -104,7 +108,8 @@ public final class PackReader implements AutoCloseable {
 
             throw new PackValidationException(
                     Reason.CORRUPT,
-                    "cannot read pack " + packFile + ": " + exception.getMessage(),
+                    "cannot read pack " + packFile + ": " + exception
+                            .getMessage(),
                     exception
             );
         } catch (RuntimeException exception) {
@@ -128,15 +133,22 @@ public final class PackReader implements AutoCloseable {
     private static Connection readOnlyConnection(Path packFile) throws SQLException {
 
         SQLiteConfig config = new SQLiteConfig();
-        config.setReadOnly(true);
-        config.setOpenMode(SQLiteOpenMode.READONLY);
-        config.enableLoadExtension(false);
-        config.setBusyTimeout(BUSY_TIMEOUT_MILLIS);
+        config
+                .setReadOnly(true);
+        config
+                .setOpenMode(SQLiteOpenMode.READONLY);
+        config
+                .enableLoadExtension(false);
+        config
+                .setBusyTimeout(BUSY_TIMEOUT_MILLIS);
 
-        Connection connection = config.createConnection("jdbc:sqlite:" + packFile);
+        Connection connection = config
+                .createConnection("jdbc:sqlite:" + packFile);
 
-        try (Statement statement = connection.createStatement()) {
-            statement.execute("PRAGMA query_only = ON");
+        try (Statement statement = connection
+                .createStatement()) {
+            statement
+                    .execute("PRAGMA query_only = ON");
         }
 
         return connection;
@@ -144,7 +156,8 @@ public final class PackReader implements AutoCloseable {
 
     private static PackInfo validate(Connection connection) throws SQLException {
 
-        try (Statement statement = connection.createStatement()) {
+        try (Statement statement = connection
+                .createStatement()) {
             requireHeader(statement);
             Map<String, JsonNode> meta = readMeta(statement);
             requireVersions(meta);
@@ -152,40 +165,70 @@ public final class PackReader implements AutoCloseable {
             requireConsistentContent(
                     connection,
                     statement,
-                    text(meta, "docVersion")
+                    text(
+                            meta,
+                            "docVersion"
+                    )
             );
             requireSearchIndex(connection);
             requireLogicalHash(
                     connection,
-                    text(meta, "logicalContentSha256")
+                    text(
+                            meta,
+                            "logicalContentSha256"
+                    )
             );
 
             return new PackInfo(
-                    text(meta, "packId"),
-                    text(meta, "project"),
-                    text(meta, "docVersion"),
-                    text(meta, "buildId"),
+                    text(
+                            meta,
+                            "packId"
+                    ),
+                    text(
+                            meta,
+                            "project"
+                    ),
+                    text(
+                            meta,
+                            "docVersion"
+                    ),
+                    text(
+                            meta,
+                            "buildId"
+                    ),
                     meta
                             .get("packSchemaVersion")
                             .asInt(),
                     meta
                             .get("minReaderVersion")
                             .asInt(),
-                    text(meta, "logicalContentSha256"),
+                    text(
+                            meta,
+                            "logicalContentSha256"
+                    ),
                     meta
                             .get("capabilities")
                             .valueStream()
                             .map(JsonNode::asString)
                             .toList(),
-                    count(statement, "SELECT count(*) FROM documents"),
-                    count(statement, "SELECT count(*) FROM chunks")
+                    count(
+                            statement,
+                            "SELECT count(*) FROM documents"
+                    ),
+                    count(
+                            statement,
+                            "SELECT count(*) FROM chunks"
+                    )
             );
         }
     }
 
     private static void requireHeader(Statement statement) throws SQLException {
 
-        long applicationId = count(statement, "PRAGMA application_id");
+        long applicationId = count(
+                statement,
+                "PRAGMA application_id"
+        );
 
         if (applicationId != APPLICATION_ID) {
             throw new PackValidationException(
@@ -194,7 +237,10 @@ public final class PackReader implements AutoCloseable {
             );
         }
 
-        long userVersion = count(statement, "PRAGMA user_version");
+        long userVersion = count(
+                statement,
+                "PRAGMA user_version"
+        );
 
         if (userVersion != READER_VERSION) {
             throw new PackValidationException(
@@ -208,17 +254,24 @@ public final class PackReader implements AutoCloseable {
 
         Map<String, JsonNode> meta = new HashMap<>();
 
-        try (ResultSet rows = statement.executeQuery("SELECT key, value FROM pack_meta")) {
-            while (rows.next()) {
+        try (ResultSet rows = statement
+                .executeQuery("SELECT key, value FROM pack_meta")) {
+            while (rows
+                    .next()) {
                 try {
-                    meta.put(
-                            rows.getString(1),
-                            JSON_MAPPER.readTree(rows.getString(2))
-                    );
+                    meta
+                            .put(
+                                    rows
+                                            .getString(1),
+                                    JSON_MAPPER
+                                            .readTree(rows
+                                                    .getString(2))
+                            );
                 } catch (JacksonException exception) {
                     throw new PackValidationException(
                             Reason.INVALID_META,
-                            "pack_meta " + rows.getString(1) + " is not JSON",
+                            "pack_meta " + rows
+                                    .getString(1) + " is not JSON",
                             exception
                     );
                 }
@@ -226,7 +279,8 @@ public final class PackReader implements AutoCloseable {
         }
 
         for (String key : REQUIRED_META_KEYS) {
-            if (!meta.containsKey(key)) {
+            if (!meta
+                    .containsKey(key)) {
                 throw new PackValidationException(
                         Reason.INVALID_META,
                         "pack_meta is missing " + key
@@ -234,10 +288,17 @@ public final class PackReader implements AutoCloseable {
             }
         }
 
-        if (!"DOCUMENT".equals(text(meta, "packType"))) {
+        if (!"DOCUMENT"
+                .equals(text(
+                        meta,
+                        "packType"
+                ))) {
             throw new PackValidationException(
                     Reason.INVALID_META,
-                    "packType " + text(meta, "packType") + " is not supported"
+                    "packType " + text(
+                            meta,
+                            "packType"
+                    ) + " is not supported"
             );
         }
 
@@ -253,10 +314,13 @@ public final class PackReader implements AutoCloseable {
         for (JsonNode capability : meta
                 .get("capabilities")
                 .values()) {
-            if (!KNOWN_CAPABILITIES.contains(capability.asString())) {
+            if (!KNOWN_CAPABILITIES
+                    .contains(capability
+                            .asString())) {
                 throw new PackValidationException(
                         Reason.INVALID_META,
-                        "unknown capability " + capability.asString()
+                        "unknown capability " + capability
+                                .asString()
                 );
             }
         }
@@ -266,18 +330,26 @@ public final class PackReader implements AutoCloseable {
 
     private static void requireVersions(Map<String, JsonNode> meta) {
 
-        JsonNode schemaVersion = meta.get("packSchemaVersion");
+        JsonNode schemaVersion = meta
+                .get("packSchemaVersion");
 
-        if (!schemaVersion.isInt() || schemaVersion.asInt() != READER_VERSION) {
+        if (!schemaVersion
+                .isInt()
+                || schemaVersion
+                        .asInt() != READER_VERSION) {
             throw new PackValidationException(
                     Reason.UNSUPPORTED_SCHEMA_VERSION,
                     "packSchemaVersion " + schemaVersion + " is not supported by reader " + READER_VERSION
             );
         }
 
-        JsonNode minReaderVersion = meta.get("minReaderVersion");
+        JsonNode minReaderVersion = meta
+                .get("minReaderVersion");
 
-        if (!minReaderVersion.isInt() || minReaderVersion.asInt() > READER_VERSION) {
+        if (!minReaderVersion
+                .isInt()
+                || minReaderVersion
+                        .asInt() > READER_VERSION) {
             throw new PackValidationException(
                     Reason.UNSUPPORTED_READER_VERSION,
                     "pack requires reader " + minReaderVersion + ", this reader is " + READER_VERSION
@@ -287,22 +359,30 @@ public final class PackReader implements AutoCloseable {
 
     private static void requireIntegrity(Statement statement) throws SQLException {
 
-        try (ResultSet rows = statement.executeQuery("PRAGMA integrity_check")) {
-            rows.next();
+        try (ResultSet rows = statement
+                .executeQuery("PRAGMA integrity_check")) {
+            rows
+                    .next();
 
-            if (!"ok".equals(rows.getString(1))) {
+            if (!"ok"
+                    .equals(rows
+                            .getString(1))) {
                 throw new PackValidationException(
                         Reason.CORRUPT,
-                        "integrity_check: " + rows.getString(1)
+                        "integrity_check: " + rows
+                                .getString(1)
                 );
             }
         }
 
-        try (ResultSet rows = statement.executeQuery("PRAGMA foreign_key_check")) {
-            if (rows.next()) {
+        try (ResultSet rows = statement
+                .executeQuery("PRAGMA foreign_key_check")) {
+            if (rows
+                    .next()) {
                 throw new PackValidationException(
                         Reason.CORRUPT,
-                        "foreign_key_check failed in table " + rows.getString(1)
+                        "foreign_key_check failed in table " + rows
+                                .getString(1)
                 );
             }
         }
@@ -346,15 +426,21 @@ public final class PackReader implements AutoCloseable {
                 "code block without exactly one default variant"
         );
 
-        try (PreparedStatement versions = connection.prepareStatement(
-                "SELECT count(*) FROM documents WHERE applicability <> 'EXACT_RELEASE' OR exact_version <> ?"
-        )) {
-            versions.setString(1, docVersion);
+        try (PreparedStatement versions = connection
+                .prepareStatement("SELECT count(*) FROM documents WHERE applicability <> 'EXACT_RELEASE' OR exact_version <> ?")) {
+            versions
+                    .setString(
+                            1,
+                            docVersion
+                    );
 
-            try (ResultSet rows = versions.executeQuery()) {
-                rows.next();
+            try (ResultSet rows = versions
+                    .executeQuery()) {
+                rows
+                        .next();
 
-                if (rows.getLong(1) != 0) {
+                if (rows
+                        .getLong(1) != 0) {
                     throw new PackValidationException(
                             Reason.INCONSISTENT_CONTENT,
                             "documents outside exact release " + docVersion
@@ -368,17 +454,21 @@ public final class PackReader implements AutoCloseable {
 
     private static void requireRowidOrder(Statement statement) throws SQLException {
 
-        try (ResultSet rows = statement.executeQuery(
-                "SELECT c.rowid FROM chunks c JOIN sections s ON s.section_id = c.section_id "
-                        + "ORDER BY c.document_id COLLATE BINARY, s.ordinal, c.ordinal, c.chunk_id COLLATE BINARY"
-        )) {
+        try (ResultSet rows = statement
+                .executeQuery(
+                        "SELECT c.rowid FROM chunks c JOIN sections s ON s.section_id = c.section_id "
+                                + "ORDER BY c.document_id COLLATE BINARY, s.ordinal, c.ordinal, c.chunk_id COLLATE BINARY"
+                )) {
             long expected = 1;
 
-            while (rows.next()) {
-                if (rows.getLong(1) != expected) {
+            while (rows
+                    .next()) {
+                if (rows
+                        .getLong(1) != expected) {
                     throw new PackValidationException(
                             Reason.INCONSISTENT_CONTENT,
-                            "chunk rowid " + rows.getLong(1) + " found where " + expected + " was expected"
+                            "chunk rowid " + rows
+                                    .getLong(1) + " found where " + expected + " was expected"
                     );
                 }
 
@@ -389,32 +479,49 @@ public final class PackReader implements AutoCloseable {
 
     private static void requireSearchIndex(Connection connection) throws SQLException {
 
-        // 앞쪽 청크에서 토큰 하나를 골라 실제 MATCH로 그 청크가 찾히는지 확인.
-        try (PreparedStatement sample = connection.prepareStatement(
-                "SELECT rowid, content FROM chunks ORDER BY rowid LIMIT 20"
-        );
-             PreparedStatement match = connection.prepareStatement(
-                     "SELECT count(*) FROM chunks_fts WHERE chunks_fts MATCH ? AND rowid = ?"
-             );
-             ResultSet rows = sample.executeQuery()) {
+        // 앞쪽 청크의 토큰 하나로 실제 MATCH 검색 시 그 청크 조회 여부 확인
+        try (PreparedStatement sample = connection
+                .prepareStatement("SELECT rowid, content FROM chunks ORDER BY rowid LIMIT 20");
+             PreparedStatement match = connection
+                     .prepareStatement("SELECT count(*) FROM chunks_fts WHERE chunks_fts MATCH ? AND rowid = ?");
+             ResultSet rows = sample
+                     .executeQuery()) {
 
-            while (rows.next()) {
-                Matcher token = FIRST_TOKEN.matcher(rows.getString(2));
+            while (rows
+                    .next()) {
+                Matcher token = FIRST_TOKEN
+                        .matcher(rows
+                                .getString(2));
 
-                if (!token.find()) {
+                if (!token
+                        .find()) {
                     continue;
                 }
 
-                match.setString(1, "\"" + token.group() + "\"");
-                match.setLong(2, rows.getLong(1));
+                match
+                        .setString(
+                                1,
+                                "\"" + token
+                                        .group() + "\""
+                        );
+                match
+                        .setLong(
+                                2,
+                                rows
+                                        .getLong(1)
+                        );
 
-                try (ResultSet found = match.executeQuery()) {
-                    found.next();
+                try (ResultSet found = match
+                        .executeQuery()) {
+                    found
+                            .next();
 
-                    if (found.getLong(1) != 1) {
+                    if (found
+                            .getLong(1) != 1) {
                         throw new PackValidationException(
                                 Reason.SEARCH_INDEX_BROKEN,
-                                "chunk " + rows.getLong(1) + " is not found by its own token"
+                                "chunk " + rows
+                                        .getLong(1) + " is not found by its own token"
                         );
                     }
                 }
@@ -429,9 +536,11 @@ public final class PackReader implements AutoCloseable {
             String recorded
     ) throws SQLException {
 
-        String actual = LogicalContentHash.compute(connection);
+        String actual = LogicalContentHash
+                .compute(connection);
 
-        if (!actual.equals(recorded)) {
+        if (!actual
+                .equals(recorded)) {
             throw new PackValidationException(
                     Reason.LOGICAL_HASH_MISMATCH,
                     "content hash " + actual + " does not match recorded " + recorded
@@ -463,9 +572,12 @@ public final class PackReader implements AutoCloseable {
             String sql
     ) throws SQLException {
 
-        try (ResultSet rows = statement.executeQuery(sql)) {
-            rows.next();
-            return rows.getLong(1);
+        try (ResultSet rows = statement
+                .executeQuery(sql)) {
+            rows
+                    .next();
+            return rows
+                    .getLong(1);
         }
     }
 
@@ -474,16 +586,19 @@ public final class PackReader implements AutoCloseable {
             String key
     ) {
 
-        JsonNode value = meta.get(key);
+        JsonNode value = meta
+                .get(key);
 
-        if (value == null || !value.isString()) {
+        if (value == null || !value
+                .isString()) {
             throw new PackValidationException(
                     Reason.INVALID_META,
                     "pack_meta " + key + " must be a JSON string"
             );
         }
 
-        return value.asString();
+        return value
+                .asString();
     }
 
     private static void closeQuietly(Connection connection) {
@@ -493,9 +608,10 @@ public final class PackReader implements AutoCloseable {
         }
 
         try {
-            connection.close();
+            connection
+                    .close();
         } catch (SQLException ignored) {
-            // 닫기 실패는 원래 오류를 가리지 않게 무시.
+            // 원래 오류를 가리지 않도록 닫기 실패 무시
         }
     }
 }

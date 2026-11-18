@@ -2,7 +2,7 @@ package io.github.kangwooju.doclens.core.pack;
 
 import java.util.List;
 
-/** 검증을 통과한 Pack의 메타데이터와 규모. */
+/** 검증을 통과한 Pack의 메타데이터와 규모 */
 public record PackInfo(
         String packId,
         String project,
@@ -18,6 +18,7 @@ public record PackInfo(
 
     public PackInfo {
 
-        capabilities = List.copyOf(capabilities);
+        capabilities = List
+                .copyOf(capabilities);
     }
 }

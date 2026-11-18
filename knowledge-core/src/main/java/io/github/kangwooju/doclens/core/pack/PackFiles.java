@@ -11,28 +11,33 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 
-/** Pack 파일 공통 처리. */
+/** Pack 파일 공통 처리 */
 public final class PackFiles {
 
     private PackFiles() {
     }
 
-    /** 파일 전체의 SHA-256(`sha256:` 접두어). 다운로드 무결성 확인용. */
+    /** 파일 전체의 SHA-256(`sha256:` 접두어), 다운로드 무결성 확인용 */
     public static String sha256(Path path) {
 
         try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            MessageDigest digest = MessageDigest
+                    .getInstance("SHA-256");
 
             try (InputStream in = new DigestInputStream(
-                    Files.newInputStream(path),
+                    Files
+                            .newInputStream(path),
                     digest
             )) {
-                in.transferTo(OutputStream.nullOutputStream());
+                in
+                        .transferTo(OutputStream
+                                .nullOutputStream());
             }
 
             return "sha256:" + HexFormat
                     .of()
-                    .formatHex(digest.digest());
+                    .formatHex(digest
+                            .digest());
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException(exception);
         } catch (IOException exception) {

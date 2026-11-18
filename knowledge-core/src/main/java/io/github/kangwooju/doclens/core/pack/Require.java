@@ -2,10 +2,11 @@ package io.github.kangwooju.doclens.core.pack;
 
 import java.util.regex.Pattern;
 
-/** Pack 입력 record의 생성 시 검사. */
+/** Pack 입력 record의 생성 시 검사 */
 final class Require {
 
-    private static final Pattern SHA256_ID = Pattern.compile("sha256:[0-9a-f]{64}");
+    private static final Pattern SHA256_ID = Pattern
+            .compile("sha256:[0-9a-f]{64}");
 
     private Require() {
     }
@@ -25,7 +26,9 @@ final class Require {
             String name
     ) {
 
-        if (value == null || value.isBlank()) {
+        if (value == null
+                || value
+                        .isBlank()) {
             throw new PackWriteException(name + " must not be blank");
         }
     }
