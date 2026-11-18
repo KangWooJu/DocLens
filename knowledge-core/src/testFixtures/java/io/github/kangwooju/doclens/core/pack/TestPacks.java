@@ -21,6 +21,8 @@ public final class TestPacks {
 
     public static final String VERSION = "4.0.0";
 
+    public static final String PROJECT = "spring-boot";
+
     private TestPacks() {
     }
 
@@ -46,13 +48,27 @@ public final class TestPacks {
         }
     }
 
-    /** 시험용 메타데이터 */
+    /** 기본 프로젝트·버전의 시험용 메타데이터 */
     public static PackMeta meta(String buildId) {
 
-        return new PackMeta(
-                "spring-boot-" + VERSION + "-test",
-                "spring-boot",
+        return meta(
+                PROJECT,
                 VERSION,
+                buildId
+        );
+    }
+
+    /** 프로젝트·버전 지정 시험용 메타데이터, packId는 `<project>-<version>-test` */
+    public static PackMeta meta(
+            String project,
+            String version,
+            String buildId
+    ) {
+
+        return new PackMeta(
+                project + "-" + version + "-test",
+                project,
+                version,
                 buildId,
                 id("input-snapshot"),
                 id("processing-config"),
@@ -69,6 +85,8 @@ public final class TestPacks {
 
         private final List<DocumentDraft> documents = new ArrayList<>();
         private String buildId = "11111111-1111-4111-8111-111111111111";
+        private String project = PROJECT;
+        private String version = VERSION;
 
         private Builder() {
         }
@@ -79,11 +97,39 @@ public final class TestPacks {
             return this;
         }
 
-        /** 새 문서 시작, 이후 chunk의 소속 문서 */
+        public Builder project(String value) {
+
+            project = value;
+            return this;
+        }
+
+        /** Pack docVersion이자 모든 문서의 exactVersion */
+        public Builder version(String value) {
+
+            version = value;
+            return this;
+        }
+
+        /** 새 reference 문서 시작, 이후 chunk의 소속 문서 */
         public Builder document(String key) {
 
+            return document(
+                    key,
+                    DocumentType.REFERENCE
+            );
+        }
+
+        /** 문서 유형 지정 새 문서 시작 */
+        public Builder document(
+                String key,
+                DocumentType documentType
+        ) {
+
             documents
-                    .add(new DocumentDraft(key));
+                    .add(new DocumentDraft(
+                            key,
+                            documentType
+                    ));
             return this;
         }
 
@@ -122,7 +168,8 @@ public final class TestPacks {
 
             return documents
                     .stream()
-                    .map(DocumentDraft::toDocument)
+                    .map(document -> document
+                            .toDocument(version))
                     .sorted((left, right) -> CanonicalJson
                             .compareCodePoints(
                                     left
@@ -133,6 +180,17 @@ public final class TestPacks {
                     .toList();
         }
 
+        /** 지금까지 지정한 프로젝트·버전·buildId의 메타데이터 */
+        public PackMeta meta() {
+
+            return TestPacks
+                    .meta(
+                            project,
+                            version,
+                            buildId
+                    );
+        }
+
         /** directory 아래 `test.pack` 쓰기와 결과 반환 */
         public PackWriteResult writeTo(Path directory) {
 
@@ -140,7 +198,7 @@ public final class TestPacks {
                     .create(
                             directory
                                     .resolve("test.pack"),
-                            meta(buildId)
+                            meta()
                     )) {
                 documents()
                         .forEach(writer::add);
@@ -153,18 +211,23 @@ public final class TestPacks {
 
     private record DocumentDraft(
             String key,
+            DocumentType documentType,
             List<ChunkDraft> chunks
     ) {
 
-        DocumentDraft(String key) {
+        DocumentDraft(
+                String key,
+                DocumentType documentType
+        ) {
 
             this(
                     key,
+                    documentType,
                     new ArrayList<>()
             );
         }
 
-        PackDocument toDocument() {
+        PackDocument toDocument(String version) {
 
             String sectionId = id("section:" + key);
             List<PackChunk> packChunks = new ArrayList<>();
@@ -196,8 +259,8 @@ public final class TestPacks {
                     id("document:" + key),
                     "https://docs.spring.io/spring-boot/" + key + ".html",
                     key,
-                    DocumentType.REFERENCE,
-                    VERSION,
+                    documentType,
+                    version,
                     id("source-snapshot"),
                     id("raw:" + key),
                     "{}",
