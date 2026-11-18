@@ -26,7 +26,7 @@ import tools.jackson.databind.json.JsonMapper;
  * 검증 후 읽기 전용으로 여는 Pack Reader(Reader 버전 1)
  *
  * <p>읽기 전용 열기, query_only, 확장 로드 금지, busy_timeout 1000ms, 파일 변경 없는 열기
- * 검색 API는 mcp-server 단계(F12)에서 추가
+ * <p>검색 SQL·정책은 사용하는 서버 몫, 이 Reader는 검증된 연결로 콜백 실행만 제공(MC10)
  */
 public final class PackReader implements AutoCloseable {
 
@@ -124,10 +124,26 @@ public final class PackReader implements AutoCloseable {
         return info;
     }
 
+    /** 검증된 읽기 전용 연결로 조회 실행, 한 Reader의 조회는 차례로 실행 */
+    public synchronized <T> T query(Query<T> query) throws SQLException {
+
+        // ponytail: Reader 하나에 잠금 하나, 동시 검색이 많아지면 연결 풀로 전환
+        return query
+                .run(connection);
+    }
+
     @Override
-    public void close() {
+    public synchronized void close() {
 
         closeQuietly(connection);
+    }
+
+    /** Reader 연결로 실행하는 조회, 연결은 닫지 않음 */
+    @FunctionalInterface
+    public interface Query<T> {
+
+        /** 연결을 받아 결과 반환 */
+        T run(Connection connection) throws SQLException;
     }
 
     // 읽기 전용·확장 로드 금지·query_only 연결 생성

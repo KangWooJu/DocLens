@@ -2,6 +2,7 @@ package io.github.kangwooju.doclens.mcp.pack.service;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 
@@ -20,6 +21,10 @@ import lombok.RequiredArgsConstructor;
 @Service
 @RequiredArgsConstructor
 public class InstalledPackService {
+
+    /** 순서 B에서 실제로 제공하는 능력(BM25 검색만) */
+    public static final List<String> SERVED_CAPABILITIES = List
+            .of("BM25");
 
     private final InstalledPackStore installedPackStore;
 
@@ -49,6 +54,44 @@ public class InstalledPackService {
                 .filter(pack -> pack
                         .project()
                         .equals(project))
+                .toList();
+    }
+
+    /** project·정확 버전·buildId(선택)로 고른 Pack, 같은 버전 build가 여럿이면 가장 늦게 설치한 것 */
+    public Optional<InstalledPack> resolve(
+            String project,
+            String exactVersion,
+            String buildId
+    ) {
+
+        return installedPackStore
+                .installed()
+                .stream()
+                .filter(pack -> pack
+                        .project()
+                        .equals(project))
+                .filter(pack -> pack
+                        .exactVersion()
+                        .equals(exactVersion))
+                .filter(pack -> buildId == null || pack
+                        .buildId()
+                        .equals(buildId))
+                .max(Comparator
+                        .comparing(InstalledPack::installedAt)
+                        .thenComparing(InstalledPack::buildId));
+    }
+
+    /** 이 서버가 설치 Pack으로 제공하는 검색 능력 */
+    public List<String> capabilities() {
+
+        return SERVED_CAPABILITIES
+                .stream()
+                .filter(capability -> installedPackStore
+                        .installed()
+                        .stream()
+                        .anyMatch(pack -> pack
+                                .capabilities()
+                                .contains(capability)))
                 .toList();
     }
 
