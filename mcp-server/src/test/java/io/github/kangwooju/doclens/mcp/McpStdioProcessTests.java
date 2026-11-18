@@ -1,0 +1,401 @@
+package io.github.kangwooju.doclens.mcp;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
+/**
+ * 실제 자식 JVM으로 띄운 서버의 stdout·종료 동작 시험
+ */
+@DisplayName("STDIO MCP 프로세스")
+class McpStdioProcessTests {
+
+    private static final JsonMapper JSON = JsonMapper
+            .builder()
+            .build();
+
+    private static final long RESPONSE_TIMEOUT_SECONDS = 30;
+
+    @TempDir
+    Path cacheRoot;
+
+    private Process process;
+
+    private final List<String> stdoutLines = new ArrayList<>();
+
+    @AfterEach
+    void stopProcess() {
+
+        if (process != null && process
+                .isAlive()) {
+            process
+                    .destroyForcibly();
+        }
+    }
+
+    @Test
+    @DisplayName("JSON-RPC만 쓰는 stdout, get_status 예산 상한, 파일 로그, stdin 종료 시 정상 종료")
+    void servesGetStatusOverStdio() throws Exception {
+
+        process = start();
+        BufferedReader stdout = new BufferedReader(new InputStreamReader(
+                process
+                        .getInputStream(),
+                StandardCharsets.UTF_8
+        ));
+        OutputStream stdin = process
+                .getOutputStream();
+
+        JsonNode initialize = request(
+                stdin,
+                stdout,
+                "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":"
+                        + "{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{},"
+                        + "\"clientInfo\":{\"name\":\"test\",\"version\":\"1\"}}}"
+        );
+        assertEquals(
+                "2025-06-18",
+                initialize
+                        .at("/result/protocolVersion")
+                        .asString()
+        );
+        assertEquals(
+                "doclens",
+                initialize
+                        .at("/result/serverInfo/name")
+                        .asString()
+        );
+
+        send(
+                stdin,
+                "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}"
+        );
+
+        JsonNode tools = request(
+                stdin,
+                stdout,
+                "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}"
+        );
+        assertEquals(
+                1,
+                tools
+                        .at("/result/tools")
+                        .size()
+        );
+        assertEquals(
+                "get_status",
+                tools
+                        .at("/result/tools/0/name")
+                        .asString()
+        );
+        assertTrue(tools
+                .at("/result/tools/0/annotations/readOnlyHint")
+                .asBoolean());
+
+        JsonNode status = request(
+                stdin,
+                stdout,
+                "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":"
+                        + "{\"name\":\"get_status\",\"arguments\":{}}}"
+        );
+        String statusLine = stdoutLines
+                .getLast();
+        JsonNode payload = status
+                .at("/result/structuredContent");
+
+        assertFalse(status
+                .at("/result/isError")
+                .asBoolean());
+        assertEquals(
+                "External source data.",
+                status
+                        .at("/result/content/0/text")
+                        .asString()
+        );
+        assertEquals(
+                "OK",
+                payload
+                        .at("/status")
+                        .asString()
+        );
+        assertEquals(
+                "NOT_READY",
+                payload
+                        .at("/readiness")
+                        .asString()
+        );
+        assertEquals(
+                "STATUS",
+                payload
+                        .at("/results/0/kind")
+                        .asString()
+        );
+        assertEquals(
+                "2025-06-18",
+                payload
+                        .at("/results/0/attributes/protocolVersion")
+                        .asString()
+        );
+
+        long reportedWireBytes = payload
+                .at("/budget/wireBytes")
+                .asLong();
+        long actualWireBytes = statusLine
+                .getBytes(StandardCharsets.UTF_8).length + 1L;
+
+        assertEquals(
+                actualWireBytes,
+                reportedWireBytes,
+                "reported wireBytes must equal the real stdout line"
+        );
+        assertEquals(
+                (reportedWireBytes + 2) / 3,
+                payload
+                        .at("/budget/estimatedTokens")
+                        .asLong()
+        );
+        assertTrue(payload
+                .at("/budget/estimatedTokens")
+                .asLong() <= 4096);
+
+        JsonNode atMinimum = request(
+                stdin,
+                stdout,
+                "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\",\"params\":"
+                        + "{\"name\":\"get_status\",\"arguments\":{\"maxContextTokens\":256}}}"
+        );
+        JsonNode minimum = atMinimum
+                .at("/result/structuredContent");
+
+        assertFalse(
+                atMinimum
+                        .at("/result/isError")
+                        .asBoolean(),
+                "get_status must fit the minimum budget with an integer id"
+        );
+        assertTrue(minimum
+                .at("/budget/estimatedTokens")
+                .asLong() <= 256);
+        assertEquals(
+                stdoutLines
+                        .getLast()
+                        .getBytes(StandardCharsets.UTF_8).length + 1L,
+                minimum
+                        .at("/budget/wireBytes")
+                        .asLong()
+        );
+
+        JsonNode invalid = request(
+                stdin,
+                stdout,
+                "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":"
+                        + "{\"name\":\"get_status\",\"arguments\":{\"maxContextTokens\":\"many\"}}}"
+        );
+        assertTrue(invalid
+                .at("/result/isError")
+                .asBoolean());
+        assertEquals(
+                "INVALID_INPUT",
+                invalid
+                        .at("/result/structuredContent/code")
+                        .asString()
+        );
+
+        stdin
+                .close();
+        assertTrue(
+                process
+                        .waitFor(
+                                RESPONSE_TIMEOUT_SECONDS,
+                                TimeUnit.SECONDS
+                        ),
+                "server must exit after stdin closes"
+        );
+        assertEquals(
+                0,
+                process
+                        .exitValue()
+        );
+
+        String rest;
+
+        while ((rest = stdout
+                .readLine()) != null) {
+            stdoutLines
+                    .add(rest);
+        }
+
+        for (String line : stdoutLines) {
+            assertEquals(
+                    "2.0",
+                    JSON
+                            .readTree(line)
+                            .at("/jsonrpc")
+                            .asString(),
+                    "stdout line must be JSON-RPC"
+            );
+        }
+
+        Path log = cacheRoot
+                .resolve("logs/server.log");
+        assertTrue(Files
+                .isRegularFile(log));
+        assertTrue(Files
+                .size(log) > 0);
+    }
+
+    @Test
+    @DisplayName("해석 불가 입력 줄의 세션 종료와 프로세스 정상 종료(SDK 2.1.0 제약, java-sdk PR #1173 병합 시 변경)")
+    void malformedLineEndsSessionAndProcess() throws Exception {
+
+        process = start();
+        BufferedReader stdout = new BufferedReader(new InputStreamReader(
+                process
+                        .getInputStream(),
+                StandardCharsets.UTF_8
+        ));
+        OutputStream stdin = process
+                .getOutputStream();
+
+        request(
+                stdin,
+                stdout,
+                "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":"
+                        + "{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{},"
+                        + "\"clientInfo\":{\"name\":\"test\",\"version\":\"1\"}}}"
+        );
+        send(
+                stdin,
+                "{not json"
+        );
+
+        assertTrue(
+                process
+                        .waitFor(
+                                RESPONSE_TIMEOUT_SECONDS,
+                                TimeUnit.SECONDS
+                        ),
+                "server must exit after the SDK closes the session"
+        );
+        assertEquals(
+                0,
+                process
+                        .exitValue()
+        );
+        assertEquals(
+                null,
+                stdout
+                        .readLine(),
+                "no parse error response is written by SDK 2.1.0"
+        );
+    }
+
+    // 캐시 루트를 임시 디렉터리로 지정한 서버 자식 프로세스
+    private Process start() throws IOException {
+
+        String classpath = System
+                .getProperty("doclens.test.serverClasspath");
+        assertNotNull(
+                classpath,
+                "doclens.test.serverClasspath is set by the Gradle test task"
+        );
+        String java = ProcessHandle
+                .current()
+                .info()
+                .command()
+                .orElse("java");
+
+        ProcessBuilder builder = new ProcessBuilder(
+                java,
+                "-cp",
+                classpath,
+                McpServerApplication.class
+                        .getName()
+        );
+        builder
+                .environment()
+                .put(
+                        "DOCLENS_CACHE",
+                        cacheRoot
+                                .toString()
+                );
+        builder
+                .redirectError(ProcessBuilder.Redirect.DISCARD);
+
+        return builder
+                .start();
+    }
+
+    // 요청 한 줄 전송 뒤 같은 id의 응답 한 줄
+    private JsonNode request(
+            OutputStream stdin,
+            BufferedReader stdout,
+            String message
+    ) throws Exception {
+
+        send(
+                stdin,
+                message
+        );
+        String line = CompletableFuture
+                .supplyAsync(() -> readLine(stdout))
+                .get(
+                        RESPONSE_TIMEOUT_SECONDS,
+                        TimeUnit.SECONDS
+                );
+        assertNotNull(
+                line,
+                "server closed stdout before responding"
+        );
+        stdoutLines
+                .add(line);
+
+        return JSON
+                .readTree(line);
+    }
+
+    // 요청 한 줄(LF 종료) 전송
+    private static void send(
+            OutputStream stdin,
+            String message
+    ) throws IOException {
+
+        stdin
+                .write((message + "\n")
+                        .getBytes(StandardCharsets.UTF_8));
+        stdin
+                .flush();
+    }
+
+    // stdout 한 줄 읽기
+    private static String readLine(BufferedReader stdout) {
+
+        try {
+            return stdout
+                    .readLine();
+        } catch (IOException exception) {
+            throw new IllegalStateException(exception);
+        }
+    }
+}

@@ -4,6 +4,7 @@ plugins {
 
 subprojects {
     apply(plugin = "java")
+    apply(plugin = "jacoco")
 
     extensions.configure<JavaPluginExtension> {
         toolchain {
@@ -36,6 +37,15 @@ subprojects {
     tasks.named<Test>("test") {
         useJUnitPlatform {
             excludeTags("external")
+        }
+        finalizedBy("jacocoTestReport")
+    }
+
+    // Coverage report only; thresholds come once enough code exists.
+    tasks.named<JacocoReport>("jacocoTestReport") {
+        reports {
+            xml.required = true
+            html.required = true
         }
     }
 
