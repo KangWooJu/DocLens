@@ -5,6 +5,7 @@ import java.util.List;
 import io.github.kangwooju.doclens.mcp.global.mcp.ServerIdentity;
 import io.github.kangwooju.doclens.mcp.global.response.Readiness;
 import io.github.kangwooju.doclens.mcp.global.response.UpdateStatus;
+import io.github.kangwooju.doclens.mcp.pack.dto.ResolvedPack;
 
 /**
  * get_status의 STATUS 결과 하나(D16), text·citation은 항상 null
@@ -17,10 +18,13 @@ public record StatusResult(
         StatusAttributes attributes
 ) {
 
-    /** Pack 없이 시작한 서버의 상태 */
-    public static StatusResult withoutPacks(
+    /** 서버 정보와 설치 Pack 기준 상태 */
+    public static StatusResult of(
             ServerIdentity identity,
-            Readiness readiness
+            Readiness readiness,
+            UpdateStatus updateStatus,
+            List<ResolvedPack> installedBuilds,
+            List<String> capabilities
     ) {
 
         return new StatusResult(
@@ -35,13 +39,11 @@ public record StatusResult(
                         identity
                                 .protocolVersion(),
                         readiness,
-                        UpdateStatus.FIRST_INSTALL_PENDING,
+                        updateStatus,
                         null,
                         null,
-                        List
-                                .of(),
-                        List
-                                .of(),
+                        installedBuilds,
+                        capabilities,
                         null
                 )
         );
