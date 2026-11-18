@@ -14,13 +14,18 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+
+import io.github.kangwooju.doclens.core.pack.TestPacks;
+import io.github.kangwooju.doclens.mcp.pack.PackInstalls;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -98,20 +103,27 @@ class McpStdioProcessTests {
                 "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}"
         );
         assertEquals(
-                1,
+                Set
+                        .of(
+                                "get_status",
+                                "list_projects",
+                                "list_versions"
+                        ),
                 tools
                         .at("/result/tools")
-                        .size()
-        );
-        assertEquals(
-                "get_status",
-                tools
-                        .at("/result/tools/0/name")
-                        .asString()
+                        .valueStream()
+                        .map(tool -> tool
+                                .at("/name")
+                                .asString())
+                        .collect(Collectors
+                                .toSet())
         );
         assertTrue(tools
-                .at("/result/tools/0/annotations/readOnlyHint")
-                .asBoolean());
+                .at("/result/tools")
+                .valueStream()
+                .allMatch(tool -> tool
+                        .at("/annotations/readOnlyHint")
+                        .asBoolean()));
 
         JsonNode status = request(
                 stdin,
@@ -308,6 +320,150 @@ class McpStdioProcessTests {
                 stdout
                         .readLine(),
                 "no parse error response is written by SDK 2.1.0"
+        );
+    }
+
+    @Test
+    @DisplayName("설치 Pack의 get_status·list_projects·list_versions 응답과 정확한 wireBytes")
+    void servesInstalledPacks() throws Exception {
+
+        PackInstalls
+                .install(
+                        cacheRoot,
+                        TestPacks
+                                .builder()
+                                .document("overview")
+                                .chunk("Spring Boot overview")
+                );
+        process = start();
+        BufferedReader stdout = new BufferedReader(new InputStreamReader(
+                process
+                        .getInputStream(),
+                StandardCharsets.UTF_8
+        ));
+        OutputStream stdin = process
+                .getOutputStream();
+
+        initialize(
+                stdin,
+                stdout
+        );
+
+        JsonNode status = request(
+                stdin,
+                stdout,
+                "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":"
+                        + "{\"name\":\"get_status\",\"arguments\":{}}}"
+        )
+                .at("/result/structuredContent");
+
+        assertEquals(
+                "READY_STALE",
+                status
+                        .at("/readiness")
+                        .asString()
+        );
+        assertEquals(
+                "STALE_SOURCE",
+                status
+                        .at("/results/0/attributes/updateStatus")
+                        .asString()
+        );
+        assertEquals(
+                "spring-boot-4.0.0-test",
+                status
+                        .at("/results/0/attributes/installedBuilds/0/packId")
+                        .asString()
+        );
+
+        JsonNode projects = request(
+                stdin,
+                stdout,
+                "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":"
+                        + "{\"name\":\"list_projects\",\"arguments\":{}}}"
+        )
+                .at("/result/structuredContent");
+
+        assertEquals(
+                "PROJECT",
+                projects
+                        .at("/results/0/kind")
+                        .asString()
+        );
+        assertEquals(
+                "spring-boot",
+                projects
+                        .at("/results/0/attributes/projectId")
+                        .asString()
+        );
+
+        JsonNode versions = request(
+                stdin,
+                stdout,
+                "{\"jsonrpc\":\"2.0\",\"id\":\"versions-1\",\"method\":\"tools/call\",\"params\":"
+                        + "{\"name\":\"list_versions\",\"arguments\":{\"project\":\"spring-boot\"}}}"
+        )
+                .at("/result/structuredContent");
+
+        assertEquals(
+                "4.0.0",
+                versions
+                        .at("/results/0/attributes/exactVersion")
+                        .asString()
+        );
+        assertTrue(versions
+                .at("/results/0/attributes/checksum")
+                .asString()
+                .startsWith("sha256:"));
+        assertEquals(
+                stdoutLines
+                        .getLast()
+                        .getBytes(StandardCharsets.UTF_8).length + 1L,
+                versions
+                        .at("/budget/wireBytes")
+                        .asLong(),
+                "reported wireBytes must equal the real stdout line for a string id"
+        );
+
+        JsonNode unknown = request(
+                stdin,
+                stdout,
+                "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\",\"params\":"
+                        + "{\"name\":\"list_versions\",\"arguments\":{\"project\":\"spring-data\"}}}"
+        );
+
+        assertEquals(
+                "NOT_FOUND",
+                unknown
+                        .at("/result/structuredContent/code")
+                        .asString()
+        );
+
+        stdin
+                .close();
+        assertTrue(process
+                .waitFor(
+                        RESPONSE_TIMEOUT_SECONDS,
+                        TimeUnit.SECONDS
+                ));
+    }
+
+    // initialize 요청과 initialized 알림
+    private void initialize(
+            OutputStream stdin,
+            BufferedReader stdout
+    ) throws Exception {
+
+        request(
+                stdin,
+                stdout,
+                "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":"
+                        + "{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{},"
+                        + "\"clientInfo\":{\"name\":\"test\",\"version\":\"1\"}}}"
+        );
+        send(
+                stdin,
+                "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}"
         );
     }
 
