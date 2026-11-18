@@ -1,7 +1,5 @@
 package io.github.kangwooju.doclens.mcp.status.facade;
 
-import java.util.List;
-
 import org.springframework.stereotype.Component;
 
 import io.github.kangwooju.doclens.mcp.global.mcp.ServerIdentity;
@@ -36,8 +34,8 @@ public class StatusFacade {
                                 .stream()
                                 .map(ResolvedPack::from)
                                 .toList(),
-                        List
-                                .of()
+                        installedPackService
+                                .capabilities()
                 );
     }
 }

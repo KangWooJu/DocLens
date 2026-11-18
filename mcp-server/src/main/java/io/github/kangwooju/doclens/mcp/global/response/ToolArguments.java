@@ -1,6 +1,7 @@
 package io.github.kangwooju.doclens.mcp.global.response;
 
 import java.math.BigInteger;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -160,6 +161,38 @@ public final class ToolArguments {
         }
 
         return text;
+    }
+
+    /** 문자열 목록 인자, 없으면 빈 목록 */
+    public static List<String> textList(
+            Map<String, Object> arguments,
+            String name,
+            int maxItems
+    ) {
+
+        Object value = arguments
+                .get(name);
+
+        if (value == null) {
+            return List
+                    .of();
+        }
+
+        if (!(value instanceof List<?> items) || items
+                .size() > maxItems) {
+            throw new InvalidToolInputException(name + " must be a list of at most " + maxItems + " strings");
+        }
+
+        for (Object item : items) {
+            if (!(item instanceof String)) {
+                throw new InvalidToolInputException(name + " must contain strings");
+            }
+        }
+
+        return items
+                .stream()
+                .map(String.class::cast)
+                .toList();
     }
 
     // JSON 정수 값의 long 변환, 소수·문자열·범위 밖 정수 거절

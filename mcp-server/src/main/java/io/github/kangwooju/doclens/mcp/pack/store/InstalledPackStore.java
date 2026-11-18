@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.sql.SQLException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -56,6 +57,24 @@ public class InstalledPackStore implements AutoCloseable {
         return List
                 .copyOf(readers
                         .keySet());
+    }
+
+    /** 설치 Pack 하나의 Reader 연결로 조회 실행 */
+    public <T> T read(
+            InstalledPack pack,
+            PackReader.Query<T> query
+    ) throws SQLException {
+
+        PackReader reader = readers
+                .get(pack);
+
+        if (reader == null) {
+            throw new IllegalArgumentException("pack is not installed: " + pack
+                    .packId());
+        }
+
+        return reader
+                .query(query);
     }
 
     @Override
