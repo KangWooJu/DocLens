@@ -107,7 +107,8 @@ class McpStdioProcessTests {
                         .of(
                                 "get_status",
                                 "list_projects",
-                                "list_versions"
+                                "list_versions",
+                                "search_docs"
                         ),
                 tools
                         .at("/result/tools")
@@ -324,7 +325,7 @@ class McpStdioProcessTests {
     }
 
     @Test
-    @DisplayName("설치 Pack의 get_status·list_projects·list_versions 응답과 정확한 wireBytes")
+    @DisplayName("설치 Pack의 get_status·list_projects·list_versions·search_docs 응답과 정확한 wireBytes")
     void servesInstalledPacks() throws Exception {
 
         PackInstalls
@@ -334,6 +335,11 @@ class McpStdioProcessTests {
                                 .builder()
                                 .document("overview")
                                 .chunk("Spring Boot overview")
+                                .chunk(
+                                        "Configure the server port",
+                                        List
+                                                .of("server.port")
+                                )
                 );
         process = start();
         BufferedReader stdout = new BufferedReader(new InputStreamReader(
@@ -373,6 +379,12 @@ class McpStdioProcessTests {
                 "spring-boot-4.0.0-test",
                 status
                         .at("/results/0/attributes/installedBuilds/0/packId")
+                        .asString()
+        );
+        assertEquals(
+                "BM25",
+                status
+                        .at("/results/0/attributes/capabilities/0")
                         .asString()
         );
 
@@ -435,6 +447,85 @@ class McpStdioProcessTests {
         assertEquals(
                 "NOT_FOUND",
                 unknown
+                        .at("/result/structuredContent/code")
+                        .asString()
+        );
+
+        JsonNode search = request(
+                stdin,
+                stdout,
+                "{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"tools/call\",\"params\":"
+                        + "{\"name\":\"search_docs\",\"arguments\":{\"query\":\"overview server.port\","
+                        + "\"project\":\"spring-boot\",\"exactVersion\":\"4.0.0\"}}}"
+        )
+                .at("/result/structuredContent");
+
+        assertEquals(
+                "Configure the server port",
+                search
+                        .at("/results/0/text")
+                        .asString()
+        );
+        assertTrue(search
+                .at("/results/0/attributes/exactIdentifierMatch")
+                .asBoolean());
+        assertEquals(
+                "Spring Boot overview",
+                search
+                        .at("/results/1/text")
+                        .asString()
+        );
+        assertEquals(
+                "spring-boot-4.0.0-test",
+                search
+                        .at("/resolved/packId")
+                        .asString()
+        );
+        assertEquals(
+                search
+                        .at("/resolved/checksum")
+                        .asString(),
+                search
+                        .at("/results/0/citation/checksum")
+                        .asString()
+        );
+        assertEquals(
+                stdoutLines
+                        .getLast()
+                        .getBytes(StandardCharsets.UTF_8).length + 1L,
+                search
+                        .at("/budget/wireBytes")
+                        .asLong()
+        );
+
+        String longQuery = "가"
+                .repeat(700);
+        JsonNode tooLong = request(
+                stdin,
+                stdout,
+                "{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"tools/call\",\"params\":"
+                        + "{\"name\":\"search_docs\",\"arguments\":{\"query\":\"" + longQuery + "\","
+                        + "\"project\":\"spring-boot\",\"exactVersion\":\"4.0.0\"}}}"
+        );
+
+        assertEquals(
+                "QUERY_TOO_LONG",
+                tooLong
+                        .at("/result/structuredContent/code")
+                        .asString()
+        );
+
+        JsonNode withCursor = request(
+                stdin,
+                stdout,
+                "{\"jsonrpc\":\"2.0\",\"id\":8,\"method\":\"tools/call\",\"params\":"
+                        + "{\"name\":\"search_docs\",\"arguments\":{\"query\":\"spring\","
+                        + "\"project\":\"spring-boot\",\"exactVersion\":\"4.0.0\",\"cursor\":\"x\"}}}"
+        );
+
+        assertEquals(
+                "INVALID_INPUT",
+                withCursor
                         .at("/result/structuredContent/code")
                         .asString()
         );
