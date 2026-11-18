@@ -69,6 +69,7 @@ final class LogicalContentHash {
                         .digest());
     }
 
+    // 테이블 행마다 canonical JSON 한 줄을 해시에 반영, 제외 메타 키 생략
     private static void digestRows(
             MessageDigest digest,
             String table,
@@ -118,6 +119,7 @@ final class LogicalContentHash {
         }
     }
 
+    // 컬럼 값의 해시용 표현(BLOB은 hex, 숫자는 long)
     private static Object columnValue(
             ResultSet rows,
             int index
@@ -149,6 +151,7 @@ final class LogicalContentHash {
                 .toString();
     }
 
+    // 해시 대상 테이블 순서와 PK BINARY 정렬 조회문
     private static Map<String, String> orderedQueries() {
 
         Map<String, String> queries = new LinkedHashMap<>();
@@ -183,6 +186,7 @@ final class LogicalContentHash {
         return queries;
     }
 
+    // SHA-256 MessageDigest 생성
     private static MessageDigest newDigest() {
 
         try {

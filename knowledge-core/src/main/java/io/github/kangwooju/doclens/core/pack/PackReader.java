@@ -130,6 +130,7 @@ public final class PackReader implements AutoCloseable {
         closeQuietly(connection);
     }
 
+    // 읽기 전용·확장 로드 금지·query_only 연결 생성
     private static Connection readOnlyConnection(Path packFile) throws SQLException {
 
         SQLiteConfig config = new SQLiteConfig();
@@ -154,6 +155,7 @@ public final class PackReader implements AutoCloseable {
         return connection;
     }
 
+    // 전체 검증 순서 실행과 PackInfo 생성
     private static PackInfo validate(Connection connection) throws SQLException {
 
         try (Statement statement = connection
@@ -223,6 +225,7 @@ public final class PackReader implements AutoCloseable {
         }
     }
 
+    // application_id·user_version 확인
     private static void requireHeader(Statement statement) throws SQLException {
 
         long applicationId = count(
@@ -250,6 +253,7 @@ public final class PackReader implements AutoCloseable {
         }
     }
 
+    // pack_meta 키·값 JSON 읽기와 필수 키 확인
     private static Map<String, JsonNode> readMeta(Statement statement) throws SQLException {
 
         Map<String, JsonNode> meta = new HashMap<>();
@@ -328,6 +332,7 @@ public final class PackReader implements AutoCloseable {
         return meta;
     }
 
+    // packSchemaVersion·minReaderVersion 지원 범위 확인
     private static void requireVersions(Map<String, JsonNode> meta) {
 
         JsonNode schemaVersion = meta
@@ -357,6 +362,7 @@ public final class PackReader implements AutoCloseable {
         }
     }
 
+    // integrity_check·foreign_key_check 확인
     private static void requireIntegrity(Statement statement) throws SQLException {
 
         try (ResultSet rows = statement
@@ -388,6 +394,7 @@ public final class PackReader implements AutoCloseable {
         }
     }
 
+    // 청크·섹션 문서 일치, 부모 순환, 기본 변형, 버전 일관성 확인
     private static void requireConsistentContent(
             Connection connection,
             Statement statement,
@@ -452,6 +459,7 @@ public final class PackReader implements AutoCloseable {
         requireRowidOrder(statement);
     }
 
+    // 청크 rowid의 1..N 설계 순서 확인
     private static void requireRowidOrder(Statement statement) throws SQLException {
 
         try (ResultSet rows = statement
@@ -477,6 +485,7 @@ public final class PackReader implements AutoCloseable {
         }
     }
 
+    // 표본 MATCH 조회로 검색 색인 확인
     private static void requireSearchIndex(Connection connection) throws SQLException {
 
         // 앞쪽 청크의 토큰 하나로 실제 MATCH 검색 시 그 청크 조회 여부 확인
@@ -531,6 +540,7 @@ public final class PackReader implements AutoCloseable {
         }
     }
 
+    // 다시 계산한 논리 해시와 기록 값 일치 확인
     private static void requireLogicalHash(
             Connection connection,
             String recorded
@@ -548,6 +558,7 @@ public final class PackReader implements AutoCloseable {
         }
     }
 
+    // 위반 행 개수 0 확인
     private static void requireZero(
             Statement statement,
             String sql,
@@ -567,6 +578,7 @@ public final class PackReader implements AutoCloseable {
         }
     }
 
+    // 단일 개수 조회
     private static long count(
             Statement statement,
             String sql
@@ -581,6 +593,7 @@ public final class PackReader implements AutoCloseable {
         }
     }
 
+    // 메타 값의 JSON 문자열 추출
     private static String text(
             Map<String, JsonNode> meta,
             String key
@@ -601,6 +614,7 @@ public final class PackReader implements AutoCloseable {
                 .asString();
     }
 
+    // 예외 없는 연결 닫기
     private static void closeQuietly(Connection connection) {
 
         if (connection == null) {
