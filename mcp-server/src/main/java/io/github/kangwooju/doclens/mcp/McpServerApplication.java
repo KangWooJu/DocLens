@@ -16,7 +16,7 @@ import io.github.kangwooju.doclens.mcp.global.mcp.ProtocolStreams;
  * 로컬 STDIO MCP 서버 진입점
  *
  * <p>stdout은 JSON-RPC 전용, 그 밖의 System.out 출력은 stderr로 전환
- * <p>stdin 종료 시 Spring 컨텍스트 종료와 프로세스 종료
+ * <p>stdin 종료 또는 SDK 세션 종료 시 Spring 컨텍스트 종료와 프로세스 종료
  */
 @SpringBootApplication
 public class McpServerApplication {
@@ -52,7 +52,8 @@ public class McpServerApplication {
                                 "protocolStreams",
                                 new ProtocolStreams(
                                         input,
-                                        protocolOutput
+                                        protocolOutput,
+                                        input::signalEnd
                                 )
                         ));
 

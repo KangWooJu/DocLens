@@ -6,7 +6,7 @@ import java.io.InputStream;
 import java.util.concurrent.CountDownLatch;
 
 /**
- * 입력 끝(EOF·읽기 실패·닫기) 신호를 내는 stdin 래퍼
+ * 입력 끝(EOF·읽기 실패·닫기·세션 종료) 신호를 내는 stdin 래퍼
  *
  * <p>MCP 클라이언트가 stdin을 닫으면 서버 종료 시작
  */
@@ -62,6 +62,13 @@ public final class EndOfInputSignal extends FilterInputStream {
                 .countDown();
         super
                 .close();
+    }
+
+    /** 외부 종료 신호(SDK 세션 종료 등) */
+    public void signalEnd() {
+
+        ended
+                .countDown();
     }
 
     /** 입력 끝까지 대기, 인터럽트도 끝으로 처리 */

@@ -7,6 +7,7 @@ import org.springframework.boot.info.BuildProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import io.github.kangwooju.doclens.mcp.global.response.ToolResponses;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.jackson3.JacksonMcpJsonMapper;
 import io.modelcontextprotocol.server.McpServer;
@@ -54,16 +55,15 @@ public class McpServerConfiguration {
             ProtocolStreams streams,
             McpJsonMapper jsonMapper,
             ServerIdentity identity,
+            ToolResponses toolResponses,
             List<McpToolEndpoint> tools
     ) {
 
         return McpServer
                 .sync(new PinnedProtocolStdioTransport(
                         jsonMapper,
-                        streams
-                                .input(),
-                        streams
-                                .output()
+                        streams,
+                        toolResponses
                 ))
                 .serverInfo(
                         identity
