@@ -487,6 +487,7 @@ class PackWriterTests {
                 .exists(abandoned));
     }
 
+    // 문서 목록 전체의 Pack 쓰기
     private void writeAll(
             String fileName,
             List<PackDocument> documents
@@ -506,6 +507,7 @@ class PackWriterTests {
         }
     }
 
+    // 임시 디렉터리 아래 하위 디렉터리 생성
     private Path subdirectory(String name) {
 
         try {
@@ -517,6 +519,7 @@ class PackWriterTests {
         }
     }
 
+    // 시험용 PackDocument 생성
     private static PackDocument document(
             String key,
             List<PackSection> sections
@@ -538,6 +541,7 @@ class PackWriterTests {
         );
     }
 
+    // 시험용 PackSection 생성
     private static PackSection section(
             String sectionId,
             String parentSectionId,
@@ -556,6 +560,7 @@ class PackWriterTests {
         );
     }
 
+    // 시험용 CodeVariant 생성
     private static CodeVariant variant(
             String name,
             boolean isDefault,
@@ -573,12 +578,14 @@ class PackWriterTests {
         );
     }
 
+    // Pack 파일 SQLite 연결
     private static Connection open(Path pack) throws SQLException {
 
         return DriverManager
                 .getConnection("jdbc:sqlite:" + pack);
     }
 
+    // 단일 값 조회
     private static long single(
             Statement statement,
             String sql
@@ -593,6 +600,7 @@ class PackWriterTests {
         }
     }
 
+    // 파일 전체 SHA-256 계산
     private static String sha256(Path path) throws Exception {
 
         return "sha256:" + HexFormat
