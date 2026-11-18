@@ -4,11 +4,12 @@ import java.util.List;
 
 import io.github.kangwooju.doclens.mcp.global.response.Readiness;
 import io.github.kangwooju.doclens.mcp.global.response.UpdateStatus;
+import io.github.kangwooju.doclens.mcp.pack.dto.ResolvedPack;
 
 /**
  * STATUS 결과 속성(D16)
  *
- * <p>installedBuilds·capabilities는 Pack 찾기(B2)와 검색(B3)이 생기면 채움
+ * <p>순서 B는 서버 최신 확인이 없어 lastAttemptedAt·lastConfirmedAt은 null
  */
 public record StatusAttributes(
         String programVersion,
@@ -17,7 +18,7 @@ public record StatusAttributes(
         UpdateStatus updateStatus,
         String lastAttemptedAt,
         String lastConfirmedAt,
-        List<Object> installedBuilds,
+        List<ResolvedPack> installedBuilds,
         List<String> capabilities,
         String errorCode
 ) {

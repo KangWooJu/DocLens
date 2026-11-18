@@ -28,12 +28,13 @@ public record ToolSuccess(
                 .copyOf(omissions);
     }
 
-    /** 잘림·누락 없는 성공 응답 초안 */
+    /** 누락 없는 성공 응답 초안 */
     public static ToolSuccess of(
             Readiness readiness,
             Object resolved,
             List<?> results,
-            int requestedBudget
+            int requestedBudget,
+            boolean truncated
     ) {
 
         return new ToolSuccess(
@@ -42,7 +43,7 @@ public record ToolSuccess(
                 readiness,
                 resolved,
                 results,
-                false,
+                truncated,
                 null,
                 List
                         .of(),

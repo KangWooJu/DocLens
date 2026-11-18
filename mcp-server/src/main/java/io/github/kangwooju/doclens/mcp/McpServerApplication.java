@@ -4,6 +4,7 @@ import java.io.FileDescriptor;
 import java.io.FileOutputStream;
 import java.io.OutputStream;
 
+import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.ConfigurableApplicationContext;
@@ -46,16 +47,24 @@ public class McpServerApplication {
         EndOfInputSignal input = new EndOfInputSignal(System.in);
         SpringApplication application = new SpringApplication(McpServerApplication.class);
         application
-                .addInitializers(context -> context
-                        .getBeanFactory()
-                        .registerSingleton(
-                                "protocolStreams",
-                                new ProtocolStreams(
-                                        input,
-                                        protocolOutput,
-                                        input::signalEnd
-                                )
-                        ));
+                .addInitializers(context -> {
+                    ConfigurableListableBeanFactory beans = context
+                            .getBeanFactory();
+                    beans
+                            .registerSingleton(
+                                    "protocolStreams",
+                                    new ProtocolStreams(
+                                            input,
+                                            protocolOutput,
+                                            input::signalEnd
+                                    )
+                            );
+                    beans
+                            .registerSingleton(
+                                    "cacheDirectory",
+                                    cacheDirectory
+                            );
+                });
 
         ConfigurableApplicationContext context = application
                 .run(args);

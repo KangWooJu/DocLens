@@ -100,6 +100,13 @@ public record CacheDirectory(Path root) {
                 .resolve("logs");
     }
 
+    /** 설치 Pack 디렉터리(`packs/<packId>/<buildId>/<sha256>.pack`) */
+    public Path packs() {
+
+        return root
+                .resolve("packs");
+    }
+
     // 환경 변수 값이 절대 경로일 때만 Path, 그 밖에는 null
     private static Path absolutePath(
             Map<String, String> environment,

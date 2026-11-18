@@ -41,7 +41,8 @@ class ToolResponsesTests {
                                                 "kind",
                                                 "STATUS"
                                         )),
-                        ToolArguments.DEFAULT_BUDGET
+                        ToolArguments.DEFAULT_BUDGET,
+                        false
                 );
         ToolSuccess success = (ToolSuccess) result
                 .structuredContent();
@@ -93,7 +94,8 @@ class ToolResponsesTests {
                                                 "kind",
                                                 "STATUS"
                                         )),
-                        ToolArguments.MIN_BUDGET
+                        ToolArguments.MIN_BUDGET,
+                        false
                 );
         CallToolResult forSmallId = toolResponses
                 .finalizeFor(
@@ -154,26 +156,24 @@ class ToolResponsesTests {
     }
 
     @Test
-    @DisplayName("예산을 넘는 결과의 BUDGET_TOO_SMALL과 최소 예산")
+    @DisplayName("첫 결과도 넘치는 응답의 BUDGET_TOO_SMALL과 최소 예산")
     void rejectsOversizedResultWithMinimumBudget() {
 
-        List<Map<String, String>> results = Collections
-                .nCopies(
-                        3,
-                        Map
-                                .of(
-                                        "text",
-                                        "x"
-                                                .repeat(400)
-                                )
-                );
+        List<Map<String, String>> results = List
+                .of(Map
+                        .of(
+                                "text",
+                                "x"
+                                        .repeat(1200)
+                        ));
 
         CallToolResult tooSmall = toolResponses
                 .success(
                         Readiness.READY,
                         null,
                         results,
-                        ToolArguments.MIN_BUDGET
+                        ToolArguments.MIN_BUDGET,
+                        false
                 );
         ToolError error = (ToolError) tooSmall
                 .structuredContent();
@@ -195,7 +195,8 @@ class ToolResponsesTests {
                         results,
                         Math
                                 .toIntExact(error
-                                        .minBudget())
+                                        .minBudget()),
+                        false
                 );
         CallToolResult justBelow = toolResponses
                 .success(
@@ -204,13 +205,71 @@ class ToolResponsesTests {
                         results,
                         Math
                                 .toIntExact(error
-                                        .minBudget() - 1)
+                                        .minBudget() - 1),
+                        false
                 );
 
         assertFalse(fits
                 .isError());
         assertTrue(justBelow
                 .isError());
+    }
+
+    @Test
+    @DisplayName("예산을 넘는 뒤쪽 결과 제외와 truncated 표시, 빈 결과의 성공")
+    void dropsTrailingResultsOverBudget() {
+
+        List<Map<String, String>> results = Collections
+                .nCopies(
+                        3,
+                        Map
+                                .of(
+                                        "text",
+                                        "x"
+                                                .repeat(400)
+                                )
+                );
+
+        CallToolResult trimmed = toolResponses
+                .success(
+                        Readiness.READY,
+                        null,
+                        results,
+                        500,
+                        false
+                );
+        ToolSuccess success = (ToolSuccess) trimmed
+                .structuredContent();
+
+        assertFalse(trimmed
+                .isError());
+        assertEquals(
+                2,
+                success
+                        .results()
+                        .size()
+        );
+        assertTrue(success
+                .truncated());
+        assertTrue(success
+                .budget()
+                .fitsRequested());
+
+        CallToolResult empty = toolResponses
+                .success(
+                        Readiness.NOT_READY,
+                        null,
+                        List
+                                .of(),
+                        ToolArguments.MIN_BUDGET,
+                        false
+                );
+
+        assertFalse(empty
+                .isError());
+        assertFalse(((ToolSuccess) empty
+                .structuredContent())
+                .truncated());
     }
 
     @Test
@@ -228,7 +287,7 @@ class ToolResponsesTests {
     }
 
     @Test
-    @DisplayName("입력 위반의 INVALID_INPUT, 그 밖 예외의 INTERNAL_ERROR 변환")
+    @DisplayName("입력 위반의 INVALID_INPUT, 처리 실패의 해당 코드, 그 밖 예외의 INTERNAL_ERROR 변환")
     void guardsToolCalls() {
 
         CallToolResult invalid = toolResponses
@@ -236,6 +295,13 @@ class ToolResponsesTests {
                         "test",
                         () -> {
                             throw new InvalidToolInputException("bad");
+                        }
+                );
+        CallToolResult notFound = toolResponses
+                .guard(
+                        "test",
+                        () -> {
+                            throw new ToolFailureException(ToolErrorCode.NOT_FOUND);
                         }
                 );
         CallToolResult internal = toolResponses
@@ -249,6 +315,12 @@ class ToolResponsesTests {
         assertEquals(
                 ToolErrorCode.INVALID_INPUT,
                 ((ToolError) invalid
+                        .structuredContent())
+                        .code()
+        );
+        assertEquals(
+                ToolErrorCode.NOT_FOUND,
+                ((ToolError) notFound
                         .structuredContent())
                         .code()
         );
@@ -305,6 +377,86 @@ class ToolResponsesTests {
                         Set
                                 .of(ToolArguments.MAX_CONTEXT_TOKENS)
                 ));
+    }
+
+    @Test
+    @DisplayName("limit 기본값·범위와 문자열 인자의 필수·형식·길이 검사")
+    void validatesLimitAndText() {
+
+        assertEquals(
+                ToolArguments.DEFAULT_LIMIT,
+                ToolArguments
+                        .limit(Map
+                                .of())
+        );
+        assertThrowsInvalid(() -> ToolArguments
+                .limit(Map
+                        .of(
+                                ToolArguments.LIMIT,
+                                51
+                        )));
+        assertEquals(
+                "spring-boot",
+                ToolArguments
+                        .text(
+                                Map
+                                        .of(
+                                                "project",
+                                                "spring-boot"
+                                        ),
+                                "project",
+                                128
+                        )
+        );
+        assertEquals(
+                null,
+                ToolArguments
+                        .optionalText(
+                                Map
+                                        .of(),
+                                "buildId",
+                                64
+                        )
+        );
+        assertEquals(
+                Map
+                        .of(),
+                ToolArguments
+                        .requireOnly(
+                                null,
+                                Set
+                                        .of()
+                        )
+        );
+
+        for (Map<String, Object> bad : List
+                .<Map<String, Object>>of(
+                        Map
+                                .of(),
+                        Map
+                                .of(
+                                        "project",
+                                        ""
+                                ),
+                        Map
+                                .of(
+                                        "project",
+                                        7
+                                ),
+                        Map
+                                .of(
+                                        "project",
+                                        "가"
+                                                .repeat(129)
+                                )
+                )) {
+            assertThrowsInvalid(() -> ToolArguments
+                    .text(
+                            bad,
+                            "project",
+                            128
+                    ));
+        }
     }
 
     // InvalidToolInputException 발생 확인

@@ -37,21 +37,66 @@ public class ToolResponses {
 
     private final McpJsonMapper jsonMapper;
 
-    /** 예약 id 기준 예산 확인을 거친 성공 응답, 넘치면 BUDGET_TOO_SMALL */
+    /**
+     * 예약 id 기준 예산에 들어가는 앞쪽 결과만 담은 성공 응답
+     *
+     * <p>뒤 결과부터 빼고 truncated 표시, 첫 결과도 넘치면 BUDGET_TOO_SMALL
+     */
     public CallToolResult success(
             Readiness readiness,
             Object resolved,
             List<?> results,
-            int requestedBudget
+            int requestedBudget,
+            boolean truncated
     ) {
+
+        int total = results
+                .size();
+
+        // ponytail: 뒤에서 하나씩 빼는 선형 탐색, 결과 상한 50이라 충분
+        for (int count = total; count > 0; count--) {
+            ToolSuccess settled = settle(
+                    ToolSuccess
+                            .of(
+                                    readiness,
+                                    resolved,
+                                    results
+                                            .subList(
+                                                    0,
+                                                    count
+                                            ),
+                                    requestedBudget,
+                                    truncated || count < total
+                            ),
+                    RESERVED_ID
+            );
+
+            if (settled
+                    .budget()
+                    .fitsRequested()) {
+                return toolResult(
+                        settled,
+                        false
+                );
+            }
+        }
 
         return fitOrReject(
                 ToolSuccess
                         .of(
                                 readiness,
                                 resolved,
-                                results,
-                                requestedBudget
+                                results
+                                        .subList(
+                                                0,
+                                                Math
+                                                        .min(
+                                                                1,
+                                                                total
+                                                        )
+                                        ),
+                                requestedBudget,
+                                truncated
                         ),
                 RESERVED_ID
         );
@@ -83,7 +128,7 @@ public class ToolResponses {
         );
     }
 
-    /** Tool 호출 실행, 입력 위반은 INVALID_INPUT, 그 밖 예외는 INTERNAL_ERROR */
+    /** Tool 호출 실행, 처리 실패는 그 오류 코드, 그 밖 예외는 INTERNAL_ERROR */
     public CallToolResult guard(
             String toolName,
             Supplier<CallToolResult> call
@@ -92,9 +137,10 @@ public class ToolResponses {
         try {
             return call
                     .get();
-        } catch (InvalidToolInputException exception) {
+        } catch (ToolFailureException exception) {
             return error(ToolError
-                    .of(ToolErrorCode.INVALID_INPUT));
+                    .of(exception
+                            .code()));
         } catch (RuntimeException exception) {
             log
                     .error(

@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.file.Files;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -13,6 +15,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 
+import io.github.kangwooju.doclens.mcp.global.cache.CacheDirectory;
 import io.github.kangwooju.doclens.mcp.global.mcp.ProtocolStreams;
 import io.github.kangwooju.doclens.mcp.global.mcp.ServerIdentity;
 import io.github.kangwooju.doclens.mcp.status.tool.GetStatusTool;
@@ -52,6 +55,14 @@ class McpServerApplicationTests {
 
     @TestConfiguration
     static class TestStreams {
+
+        // 빈 임시 디렉터리 캐시 루트
+        @Bean
+        CacheDirectory cacheDirectory() throws IOException {
+
+            return new CacheDirectory(Files
+                    .createTempDirectory("doclens-cache"));
+        }
 
         // 빈 stdin과 메모리 stdout으로 만든 시험용 프로토콜 스트림
         @Bean
