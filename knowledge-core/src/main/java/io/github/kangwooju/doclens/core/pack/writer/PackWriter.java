@@ -3,23 +3,22 @@ package io.github.kangwooju.doclens.core.pack.writer;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
-import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Arrays;
+import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Stream;
 
 import io.github.kangwooju.doclens.core.json.CanonicalJson;
 import io.github.kangwooju.doclens.core.pack.dto.CodeVariant;
@@ -31,12 +30,13 @@ import io.github.kangwooju.doclens.core.pack.dto.PackSection;
 import io.github.kangwooju.doclens.core.pack.dto.PackWriteResult;
 import io.github.kangwooju.doclens.core.pack.exception.PackWriteException;
 import io.github.kangwooju.doclens.core.pack.support.LogicalContentHash;
-import io.github.kangwooju.doclens.core.pack.support.PackFiles;
+import io.github.kangwooju.doclens.core.pack.type.PackCapability;
+import io.github.kangwooju.doclens.core.pack.type.PackMetaKey;
 
 /**
  * Document Pack v1 Writer
  * 문서는 documentId 순, 섹션과 청크는 ordinal 순으로 받고 순서가 어긋나면 거절
- * finish에서 FTS 재구성, 무결성 검사, fsync, SHA-256 계산
+ * 파일 검사와 마무리는 PackFileFinalizer 담당
  */
 public final class PackWriter implements AutoCloseable {
 
@@ -44,12 +44,6 @@ public final class PackWriter implements AutoCloseable {
     public static final long MAX_PACK_BYTES = 536_870_912L;
 
     private static final String DDL_RESOURCE = "/pack/document-pack-v1.sql";
-    private static final List<String> SIDE_FILES = List
-            .of(
-                    "-journal",
-                    "-wal",
-                    "-shm"
-            );
 
     private final Path target;
     private final PackMeta meta;
@@ -207,7 +201,8 @@ public final class PackWriter implements AutoCloseable {
             String logicalContentSha256 = LogicalContentHash
                     .compute(connection);
             insertMeta(
-                    "logicalContentSha256",
+                    PackMetaKey.LOGICAL_CONTENT_SHA256
+                            .key(),
                     CanonicalJson
                             .write(logicalContentSha256)
             );
@@ -216,25 +211,19 @@ public final class PackWriter implements AutoCloseable {
             connection
                     .setAutoCommit(true);
 
-            verifyDatabase();
+            PackFileFinalizer
+                    .verifyDatabase(
+                            connection,
+                            documentCount,
+                            nextChunkRowid - 1
+                    );
             closeStatementsAndConnection();
-            verifyNoSideFiles();
-            fsync();
 
-            long size = Files
-                    .size(target);
-
-            if (size > MAX_PACK_BYTES) {
-                throw new PackWriteException("pack exceeds " + MAX_PACK_BYTES + " bytes: " + size);
-            }
-
-            return new PackWriteResult(
-                    target,
-                    PackFiles
-                            .sha256(target),
-                    size,
-                    logicalContentSha256
-            );
+            return PackFileFinalizer
+                    .complete(
+                            target,
+                            logicalContentSha256
+                    );
         } catch (SQLException | IOException | UncheckedIOException | PackWriteException exception) {
             closeStatementsAndConnection();
             deleteQuietly(target);
@@ -650,112 +639,112 @@ public final class PackWriter implements AutoCloseable {
         }
     }
 
-    // pack_meta 16개 키 저장(logicalContentSha256 제외)
+    // pack_meta 키 저장(logicalContentSha256 제외)
     private void writeMeta() throws SQLException {
 
-        Map<String, Object> values = new LinkedHashMap<>();
+        Map<PackMetaKey, Object> values = new EnumMap<>(PackMetaKey.class);
         values
                 .put(
-                        "packId",
+                        PackMetaKey.PACK_ID,
                         meta
                                 .packId()
                 );
         values
                 .put(
-                        "packType",
+                        PackMetaKey.PACK_TYPE,
                         "DOCUMENT"
                 );
         values
                 .put(
-                        "project",
+                        PackMetaKey.PROJECT,
                         meta
                                 .project()
                 );
         values
                 .put(
-                        "docVersion",
+                        PackMetaKey.DOC_VERSION,
                         meta
                                 .docVersion()
                 );
         values
                 .put(
-                        "buildId",
+                        PackMetaKey.BUILD_ID,
                         meta
                                 .buildId()
                 );
         values
                 .put(
-                        "packSchemaVersion",
+                        PackMetaKey.PACK_SCHEMA_VERSION,
                         1
                 );
         values
                 .put(
-                        "minReaderVersion",
+                        PackMetaKey.MIN_READER_VERSION,
                         1
                 );
         values
                 .put(
-                        "inputSnapshotHash",
+                        PackMetaKey.INPUT_SNAPSHOT_HASH,
                         meta
                                 .inputSnapshotHash()
                 );
         values
                 .put(
-                        "processingConfigHash",
+                        PackMetaKey.PROCESSING_CONFIG_HASH,
                         meta
                                 .processingConfigHash()
                 );
         values
                 .put(
-                        "parserPolicyVersion",
+                        PackMetaKey.PARSER_POLICY_VERSION,
                         meta
                                 .parserPolicyVersion()
                 );
         values
                 .put(
-                        "chunkerPolicyVersion",
+                        PackMetaKey.CHUNKER_POLICY_VERSION,
                         meta
                                 .chunkerPolicyVersion()
                 );
         values
                 .put(
-                        "sourceAttribution",
+                        PackMetaKey.SOURCE_ATTRIBUTION,
                         meta
                                 .sourceAttribution()
                 );
         values
                 .put(
-                        "sourceSnapshotIds",
+                        PackMetaKey.SOURCE_SNAPSHOT_IDS,
                         meta
                                 .sourceSnapshotIds()
                 );
         values
                 .put(
-                        "capabilities",
-                        List
-                                .of(
-                                        "BM25",
-                                        "SECTIONS",
-                                        "VARIANTS"
-                                )
+                        PackMetaKey.CAPABILITIES,
+                        Stream
+                                .of(PackCapability
+                                        .values())
+                                .map(PackCapability::name)
+                                .toList()
                 );
         values
                 .put(
-                        "embedding",
+                        PackMetaKey.EMBEDDING,
                         null
                 );
         values
                 .put(
-                        "createdBy",
+                        PackMetaKey.CREATED_BY,
                         meta
                                 .createdBy()
                 );
 
-        for (Map.Entry<String, Object> entry : values
+        for (Map.Entry<PackMetaKey, Object> entry : values
                 .entrySet()) {
             insertMeta(
                     entry
-                            .getKey(),
+                            .getKey()
+                            .key(),
                     CanonicalJson
                             .write(entry
                                     .getValue())
@@ -783,100 +772,6 @@ public final class PackWriter implements AutoCloseable {
                     );
             statement
                     .executeUpdate();
-        }
-    }
-
-    // FTS 재구성, 무결성 검사, 행 수 확인
-    private void verifyDatabase() throws SQLException {
-
-        try (Statement statement = connection
-                .createStatement()) {
-            statement
-                    .execute("INSERT INTO chunks_fts(chunks_fts) VALUES('rebuild')");
-            statement
-                    .execute("INSERT INTO chunks_fts(chunks_fts, rank) VALUES('integrity-check', 1)");
-
-            try (ResultSet rows = statement
-                    .executeQuery("PRAGMA foreign_key_check")) {
-                if (rows
-                        .next()) {
-                    throw new PackWriteException("foreign_key_check failed in table " + rows
-                            .getString(1));
-                }
-            }
-
-            try (ResultSet rows = statement
-                    .executeQuery("PRAGMA integrity_check")) {
-                rows
-                        .next();
-
-                if (!"ok"
-                        .equals(rows
-                                .getString(1))) {
-                    throw new PackWriteException("integrity_check failed: " + rows
-                            .getString(1));
-                }
-            }
-
-            requireCount(
-                    statement,
-                    "SELECT count(*) FROM documents",
-                    documentCount
-            );
-            requireCount(
-                    statement,
-                    "SELECT count(*) FROM chunks",
-                    nextChunkRowid - 1
-            );
-        }
-    }
-
-    // 조회 결과 개수와 기대값 일치 검사
-    private static void requireCount(
-            Statement statement,
-            String sql,
-            long expected
-    ) throws SQLException {
-
-        try (ResultSet rows = statement
-                .executeQuery(sql)) {
-            rows
-                    .next();
-
-            if (rows
-                    .getLong(1) != expected) {
-                throw new PackWriteException(sql + " returned " + rows
-                        .getLong(1) + ", expected " + expected);
-            }
-        }
-    }
-
-    // journal, WAL, SHM 파일이 남지 않았는지 확인
-    private void verifyNoSideFiles() {
-
-        for (String suffix : SIDE_FILES) {
-            Path side = target
-                    .resolveSibling(target
-                            .getFileName() + suffix);
-
-            if (Files
-                    .exists(side)) {
-                throw new PackWriteException("journal side file remains: " + side);
-            }
-        }
-    }
-
-    // Pack 파일 내용의 디스크 기록 강제
-    private void fsync() throws IOException {
-
-        try (FileChannel channel = FileChannel
-                .open(
-                        target,
-                        StandardOpenOption.READ,
-                        StandardOpenOption.WRITE
-                )) {
-            channel
-                    .force(true);
         }
     }
 
@@ -984,7 +879,7 @@ public final class PackWriter implements AutoCloseable {
             Files
                     .deleteIfExists(path);
 
-            for (String suffix : SIDE_FILES) {
+            for (String suffix : PackFileFinalizer.SIDE_FILES) {
                 Files
                         .deleteIfExists(path
                                 .resolveSibling(path
