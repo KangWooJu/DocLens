@@ -41,6 +41,9 @@ public class JavaCommentCheck {
     private static final Map<Pattern, String> WORDING_RULES = Map
             .of(
                     Pattern
+                            .compile("<p>"),
+                    "<p> tag in comment",
+                    Pattern
                             .compile("·"),
                     "middle dot, use a comma",
                     Pattern
@@ -185,7 +188,7 @@ public class JavaCommentCheck {
         }
     }
 
-    // 한 파일의 HTML 단락 태그와 메서드 주석 검사
+    // 한 파일의 주석 문구와 메서드 주석 검사
     private static void check(
             CompilationUnitTree unit,
             SourcePositions positions,
@@ -199,12 +202,6 @@ public class JavaCommentCheck {
         String path = unit
                 .getSourceFile()
                 .getName();
-
-        if (source
-                .contains("<p>")) {
-            violations
-                    .add(path + ": <p> tag in comment");
-        }
 
         checkWording(
                 path,
