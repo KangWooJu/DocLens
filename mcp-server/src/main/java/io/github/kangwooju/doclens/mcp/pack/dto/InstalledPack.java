@@ -3,11 +3,7 @@ package io.github.kangwooju.doclens.mcp.pack.dto;
 import java.time.Instant;
 import java.util.List;
 
-/**
- * 시작 시 검증을 통과한 설치 Pack 하나
- *
- * <p>checksum은 파일 전체 SHA-256(`sha256:` 접두어), installedAt은 파일 수정 시각(초 단위)
- */
+/** 시작할 때 검증을 통과한 설치 Pack, installedAt은 파일 수정 시각 */
 public record InstalledPack(
         String packId,
         String buildId,
@@ -18,6 +14,7 @@ public record InstalledPack(
         List<String> capabilities
 ) {
 
+    /** capabilities 불변 사본 */
     public InstalledPack {
 
         capabilities = List

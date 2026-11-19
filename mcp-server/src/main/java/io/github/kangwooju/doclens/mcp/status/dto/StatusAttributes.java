@@ -2,15 +2,11 @@ package io.github.kangwooju.doclens.mcp.status.dto;
 
 import java.util.List;
 
-import io.github.kangwooju.doclens.mcp.global.response.Readiness;
-import io.github.kangwooju.doclens.mcp.global.response.UpdateStatus;
+import io.github.kangwooju.doclens.mcp.global.response.type.Readiness;
+import io.github.kangwooju.doclens.mcp.global.response.type.UpdateStatus;
 import io.github.kangwooju.doclens.mcp.pack.dto.ResolvedPack;
 
-/**
- * STATUS 결과 속성(D16)
- *
- * <p>순서 B는 서버 최신 확인이 없어 lastAttemptedAt·lastConfirmedAt은 null
- */
+/** STATUS 결과 속성, lastAttemptedAt과 lastConfirmedAt은 아직 null */
 public record StatusAttributes(
         String programVersion,
         String protocolVersion,
@@ -23,6 +19,7 @@ public record StatusAttributes(
         String errorCode
 ) {
 
+    /** 목록 불변 사본 */
     public StatusAttributes {
 
         installedBuilds = List

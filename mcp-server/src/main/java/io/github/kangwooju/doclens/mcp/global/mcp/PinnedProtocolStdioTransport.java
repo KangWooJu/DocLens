@@ -2,17 +2,14 @@ package io.github.kangwooju.doclens.mcp.global.mcp;
 
 import java.util.List;
 
+import io.github.kangwooju.doclens.mcp.global.mcp.dto.ProtocolStreams;
 import io.github.kangwooju.doclens.mcp.global.response.ToolResponses;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.ProtocolVersions;
 
-/**
- * 프로토콜 버전을 2025-06-18 하나로 고정한 STDIO transport(D16 응답 계약 기준)
- *
- * <p>세션 transport를 {@link BudgetFinalizingTransport}로 감싸 실제 id 기준 예산 확정과 종료 신호 전달
- */
+/** 프로토콜 버전을 2025-06-18로 고정한 STDIO transport */
 public final class PinnedProtocolStdioTransport extends StdioServerTransportProvider {
 
     /** 지원 MCP 프로토콜 버전 */
@@ -22,6 +19,7 @@ public final class PinnedProtocolStdioTransport extends StdioServerTransportProv
 
     private final Runnable onSessionClosed;
 
+    /** 프로토콜 스트림 기반 transport 생성 */
     public PinnedProtocolStdioTransport(
             McpJsonMapper jsonMapper,
             ProtocolStreams streams,
@@ -40,6 +38,7 @@ public final class PinnedProtocolStdioTransport extends StdioServerTransportProv
                 .onSessionClosed();
     }
 
+    /** 세션 transport를 예산 확정 래퍼로 교체 */
     @Override
     public void setSessionFactory(McpServerSession.Factory sessionFactory) {
 
@@ -52,6 +51,7 @@ public final class PinnedProtocolStdioTransport extends StdioServerTransportProv
                         )));
     }
 
+    /** 지원 프로토콜 버전 목록 */
     @Override
     public List<String> protocolVersions() {
 

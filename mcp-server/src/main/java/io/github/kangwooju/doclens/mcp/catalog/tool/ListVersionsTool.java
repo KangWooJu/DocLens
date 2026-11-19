@@ -8,18 +8,16 @@ import org.springframework.stereotype.Component;
 
 import io.github.kangwooju.doclens.mcp.catalog.dto.CatalogPage;
 import io.github.kangwooju.doclens.mcp.catalog.facade.CatalogFacade;
+import io.github.kangwooju.doclens.mcp.global.input.ToolArguments;
+import io.github.kangwooju.doclens.mcp.global.input.ToolDefinitions;
 import io.github.kangwooju.doclens.mcp.global.mcp.McpToolEndpoint;
-import io.github.kangwooju.doclens.mcp.global.mcp.ToolDefinitions;
-import io.github.kangwooju.doclens.mcp.global.response.ToolArguments;
 import io.github.kangwooju.doclens.mcp.global.response.ToolResponses;
 import io.modelcontextprotocol.server.McpServerFeatures.SyncToolSpecification;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import lombok.RequiredArgsConstructor;
 
-/**
- * list_versions Tool 진입부: 한 프로젝트의 설치 정확 버전·build 목록
- */
+/** list_versions Tool, 한 프로젝트의 설치 버전 목록 */
 @Component
 @RequiredArgsConstructor
 public class ListVersionsTool implements McpToolEndpoint {
@@ -44,6 +42,7 @@ public class ListVersionsTool implements McpToolEndpoint {
 
     private final ToolResponses toolResponses;
 
+    /** list_versions Tool 등록 정보 */
     @Override
     public SyncToolSpecification specification() {
 
@@ -94,7 +93,7 @@ public class ListVersionsTool implements McpToolEndpoint {
                 );
     }
 
-    // Tool 이름·설명·입력 schema·읽기 전용 표시
+    // Tool 정의(이름, 설명, 입력 schema)
     private static Tool definition() {
 
         return ToolDefinitions

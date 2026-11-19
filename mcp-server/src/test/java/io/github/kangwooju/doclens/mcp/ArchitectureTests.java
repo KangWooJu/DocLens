@@ -20,9 +20,7 @@ import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.lang.ArchRule;
 
-/**
- * 계층 규칙 A0~A8 자동 검사(global 패키지는 계층 판정 제외)
- */
+/** 계층 규칙 검사, global 패키지는 제외 */
 @DisplayName("mcp-server 계층 규칙")
 class ArchitectureTests {
 
@@ -77,7 +75,7 @@ class ArchitectureTests {
     }
 
     @Test
-    @DisplayName("A1 Tool 진입부의 Facade·DTO·공통·프레임워크 의존만 허용")
+    @DisplayName("A1 Tool 진입부는 Facade, DTO, 공통, 프레임워크에만 의존")
     void toolEntryPointsDependOnFacadeOnly() {
 
         check(classes()
@@ -147,7 +145,7 @@ class ArchitectureTests {
     }
 
     @Test
-    @DisplayName("A4 Policy의 저장소·외부 클라이언트 의존 금지")
+    @DisplayName("A4 Policy의 저장소, 외부 클라이언트 의존 금지")
     void policiesStayPure() {
 
         check(noClasses()
@@ -165,7 +163,7 @@ class ArchitectureTests {
     }
 
     @Test
-    @DisplayName("A5 dto 패키지 클래스는 record")
+    @DisplayName("A5 dto 패키지에는 record만, 최상위 record는 dto 패키지에만 위치")
     void dtosAreRecords() {
 
         check(classes()
@@ -173,6 +171,13 @@ class ArchitectureTests {
                 .resideInAPackage("..dto..")
                 .should()
                 .beRecords());
+        check(classes()
+                .that()
+                .areTopLevelClasses()
+                .and()
+                .areRecords()
+                .should()
+                .resideInAPackage("..dto.."));
     }
 
     @Test
@@ -198,7 +203,7 @@ class ArchitectureTests {
     }
 
     @Test
-    @DisplayName("A7 TransactionTemplate·PlatformTransactionManager 직접 사용 금지")
+    @DisplayName("A7 TransactionTemplate, PlatformTransactionManager 직접 사용 금지")
     void noDirectTransactionApis() {
 
         check(noClasses()
@@ -211,7 +216,7 @@ class ArchitectureTests {
     }
 
     @Test
-    @DisplayName("A8 보조 객체 간 의존 금지(Handler·Repository·Store의 Converter 사용만 허용)")
+    @DisplayName("A8 보조 객체 간 의존 금지(Handler, Repository, Store의 Converter 사용만 허용)")
     void helpersDoNotDependOnEachOther() {
 
         for (String helper : HELPER_PACKAGES) {
@@ -232,6 +237,42 @@ class ArchitectureTests {
                     .dependOnClassesThat()
                     .resideInAnyPackage(forbidden));
         }
+    }
+
+    @Test
+    @DisplayName("A9 enum은 type 패키지에만 위치")
+    void enumsLiveInTypePackage() {
+
+        check(classes()
+                .that()
+                .areEnums()
+                .should()
+                .resideInAPackage("..type.."));
+        check(classes()
+                .that()
+                .resideInAPackage("..type..")
+                .and()
+                .areTopLevelClasses()
+                .should()
+                .beEnums());
+    }
+
+    @Test
+    @DisplayName("A10 예외는 exception 패키지에만 위치")
+    void exceptionsLiveInExceptionPackage() {
+
+        check(classes()
+                .that()
+                .areAssignableTo(Throwable.class)
+                .should()
+                .resideInAPackage("..exception.."));
+        check(classes()
+                .that()
+                .resideInAPackage("..exception..")
+                .and()
+                .areTopLevelClasses()
+                .should()
+                .beAssignableTo(Throwable.class));
     }
 
     // 대상 클래스가 아직 없는 계층도 통과시키는 규칙 검사

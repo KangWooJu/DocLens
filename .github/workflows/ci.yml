@@ -27,6 +27,9 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v6
 
+      - name: Java comment rules
+        run: java tools/JavaCommentCheck.java
+
       - run: ./gradlew build --console=plain
 
   collector:

@@ -9,15 +9,13 @@ import org.springframework.stereotype.Component;
 import io.github.kangwooju.doclens.mcp.catalog.dto.CatalogPage;
 import io.github.kangwooju.doclens.mcp.catalog.dto.ProjectResult;
 import io.github.kangwooju.doclens.mcp.catalog.dto.VersionResult;
-import io.github.kangwooju.doclens.mcp.global.response.ToolErrorCode;
-import io.github.kangwooju.doclens.mcp.global.response.ToolFailureException;
+import io.github.kangwooju.doclens.mcp.global.response.exception.ToolFailureException;
+import io.github.kangwooju.doclens.mcp.global.response.type.ToolErrorCode;
 import io.github.kangwooju.doclens.mcp.pack.dto.InstalledPack;
 import io.github.kangwooju.doclens.mcp.pack.service.InstalledPackService;
 import lombok.RequiredArgsConstructor;
 
-/**
- * 설치 프로젝트·버전 목록 Facade
- */
+/** 설치된 프로젝트와 버전 목록 Facade */
 @Component
 @RequiredArgsConstructor
 public class CatalogFacade {

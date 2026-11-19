@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
-@DisplayName("PipelineApplication")
+@DisplayName("pipeline 애플리케이션")
 class PipelineApplicationTests {
 
     @Test

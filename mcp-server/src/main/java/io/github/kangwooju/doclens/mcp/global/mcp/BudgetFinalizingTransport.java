@@ -12,9 +12,7 @@ import reactor.core.publisher.Mono;
 
 /**
  * 세션 transport 래퍼
- *
- * <p>Tool 응답 전송 직전 실제 JSON-RPC id 기준 예산 재계산
- * <p>세션 종료(stdin EOF·해석 불가 입력 등) 시 프로세스 종료 신호
+ * 전송 직전 실제 id 기준 예산 재계산과 세션 종료 신호 전달
  */
 final class BudgetFinalizingTransport implements McpServerTransport {
 
@@ -24,6 +22,7 @@ final class BudgetFinalizingTransport implements McpServerTransport {
 
     private final Runnable onClosed;
 
+    // 원래 transport와 종료 동작을 받는 래퍼
     BudgetFinalizingTransport(
             McpServerTransport delegate,
             ToolResponses toolResponses,
@@ -35,6 +34,7 @@ final class BudgetFinalizingTransport implements McpServerTransport {
         this.onClosed = onClosed;
     }
 
+    /** 예산 확정 후 메시지 전송 */
     @Override
     public Mono<Void> sendMessage(JSONRPCMessage message) {
 
@@ -42,6 +42,7 @@ final class BudgetFinalizingTransport implements McpServerTransport {
                 .sendMessage(finalized(message));
     }
 
+    /** 정상 종료 후 종료 신호 */
     @Override
     public Mono<Void> closeGracefully() {
 
@@ -51,6 +52,7 @@ final class BudgetFinalizingTransport implements McpServerTransport {
                         .run());
     }
 
+    /** 즉시 종료 후 종료 신호 */
     @Override
     public void close() {
 
@@ -63,6 +65,7 @@ final class BudgetFinalizingTransport implements McpServerTransport {
         }
     }
 
+    /** 원래 transport에 역직렬화 위임 */
     @Override
     public <T> T unmarshalFrom(
             Object data,
@@ -76,6 +79,7 @@ final class BudgetFinalizingTransport implements McpServerTransport {
                 );
     }
 
+    /** 원래 transport의 프로토콜 버전 */
     @Override
     public List<String> protocolVersions() {
 

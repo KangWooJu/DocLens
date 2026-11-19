@@ -2,23 +2,28 @@ package io.github.kangwooju.doclens.mcp.global.response;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import io.github.kangwooju.doclens.mcp.global.response.dto.Budget;
+import io.github.kangwooju.doclens.mcp.global.response.dto.ToolError;
+import io.github.kangwooju.doclens.mcp.global.response.dto.ToolSuccess;
+import io.github.kangwooju.doclens.mcp.global.response.exception.InvalidToolInputException;
+import io.github.kangwooju.doclens.mcp.global.response.exception.ToolFailureException;
+import io.github.kangwooju.doclens.mcp.global.response.type.Readiness;
+import io.github.kangwooju.doclens.mcp.global.response.type.ToolErrorCode;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.jackson3.JacksonMcpJsonMapper;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import tools.jackson.databind.json.JsonMapper;
 
-@DisplayName("ToolResponses")
+@DisplayName("Tool 응답 조립")
 class ToolResponsesTests {
 
     private final McpJsonMapper jsonMapper = new JacksonMcpJsonMapper(JsonMapper
@@ -41,7 +46,7 @@ class ToolResponsesTests {
                                                 "kind",
                                                 "STATUS"
                                         )),
-                        ToolArguments.DEFAULT_BUDGET,
+                        Budget.DEFAULT,
                         false
                 );
         ToolSuccess success = (ToolSuccess) result
@@ -94,7 +99,7 @@ class ToolResponsesTests {
                                                 "kind",
                                                 "STATUS"
                                         )),
-                        ToolArguments.MIN_BUDGET,
+                        Budget.MIN,
                         false
                 );
         CallToolResult forSmallId = toolResponses
@@ -172,7 +177,7 @@ class ToolResponsesTests {
                         Readiness.READY,
                         null,
                         results,
-                        ToolArguments.MIN_BUDGET,
+                        Budget.MIN,
                         false
                 );
         ToolError error = (ToolError) tooSmall
@@ -261,7 +266,7 @@ class ToolResponsesTests {
                         null,
                         List
                                 .of(),
-                        ToolArguments.MIN_BUDGET,
+                        Budget.MIN,
                         false
                 );
 
@@ -329,142 +334,6 @@ class ToolResponsesTests {
                 ((ToolError) internal
                         .structuredContent())
                         .code()
-        );
-    }
-
-    @Test
-    @DisplayName("maxContextTokens 기본값·범위·정수 검사와 미지 인자 거절")
-    void validatesArguments() {
-
-        assertEquals(
-                ToolArguments.DEFAULT_BUDGET,
-                ToolArguments
-                        .maxContextTokens(Map
-                                .of())
-        );
-        assertEquals(
-                300,
-                ToolArguments
-                        .maxContextTokens(Map
-                                .of(
-                                        ToolArguments.MAX_CONTEXT_TOKENS,
-                                        300
-                                ))
-        );
-
-        for (Object bad : List
-                .of(
-                        255,
-                        16385,
-                        300.5,
-                        "300"
-                )) {
-            assertThrowsInvalid(() -> ToolArguments
-                    .maxContextTokens(Map
-                            .of(
-                                    ToolArguments.MAX_CONTEXT_TOKENS,
-                                    bad
-                            )));
-        }
-
-        assertThrowsInvalid(() -> ToolArguments
-                .requireOnly(
-                        Map
-                                .of(
-                                        "query",
-                                        "x"
-                                ),
-                        Set
-                                .of(ToolArguments.MAX_CONTEXT_TOKENS)
-                ));
-    }
-
-    @Test
-    @DisplayName("limit 기본값·범위와 문자열 인자의 필수·형식·길이 검사")
-    void validatesLimitAndText() {
-
-        assertEquals(
-                ToolArguments.DEFAULT_LIMIT,
-                ToolArguments
-                        .limit(Map
-                                .of())
-        );
-        assertThrowsInvalid(() -> ToolArguments
-                .limit(Map
-                        .of(
-                                ToolArguments.LIMIT,
-                                51
-                        )));
-        assertEquals(
-                "spring-boot",
-                ToolArguments
-                        .text(
-                                Map
-                                        .of(
-                                                "project",
-                                                "spring-boot"
-                                        ),
-                                "project",
-                                128
-                        )
-        );
-        assertEquals(
-                null,
-                ToolArguments
-                        .optionalText(
-                                Map
-                                        .of(),
-                                "buildId",
-                                64
-                        )
-        );
-        assertEquals(
-                Map
-                        .of(),
-                ToolArguments
-                        .requireOnly(
-                                null,
-                                Set
-                                        .of()
-                        )
-        );
-
-        for (Map<String, Object> bad : List
-                .<Map<String, Object>>of(
-                        Map
-                                .of(),
-                        Map
-                                .of(
-                                        "project",
-                                        ""
-                                ),
-                        Map
-                                .of(
-                                        "project",
-                                        7
-                                ),
-                        Map
-                                .of(
-                                        "project",
-                                        "가"
-                                                .repeat(129)
-                                )
-                )) {
-            assertThrowsInvalid(() -> ToolArguments
-                    .text(
-                            bad,
-                            "project",
-                            128
-                    ));
-        }
-    }
-
-    // InvalidToolInputException 발생 확인
-    private static void assertThrowsInvalid(Runnable call) {
-
-        assertThrows(
-                InvalidToolInputException.class,
-                call::run
         );
     }
 }

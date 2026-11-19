@@ -2,14 +2,12 @@ package io.github.kangwooju.doclens.mcp.status.dto;
 
 import java.util.List;
 
-import io.github.kangwooju.doclens.mcp.global.mcp.ServerIdentity;
-import io.github.kangwooju.doclens.mcp.global.response.Readiness;
-import io.github.kangwooju.doclens.mcp.global.response.UpdateStatus;
+import io.github.kangwooju.doclens.mcp.global.mcp.dto.ServerIdentity;
+import io.github.kangwooju.doclens.mcp.global.response.type.Readiness;
+import io.github.kangwooju.doclens.mcp.global.response.type.UpdateStatus;
 import io.github.kangwooju.doclens.mcp.pack.dto.ResolvedPack;
 
-/**
- * get_status의 STATUS 결과 하나(D16), text·citation은 항상 null
- */
+/** get_status 결과, text와 citation은 null */
 public record StatusResult(
         String kind,
         String id,

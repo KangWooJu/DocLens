@@ -13,13 +13,13 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import io.github.kangwooju.doclens.core.pack.PackFiles;
-import io.github.kangwooju.doclens.core.pack.TestPacks;
+import io.github.kangwooju.doclens.core.pack.fixture.TestPacks;
+import io.github.kangwooju.doclens.core.pack.support.PackFiles;
 import io.github.kangwooju.doclens.mcp.global.cache.CacheDirectory;
 import io.github.kangwooju.doclens.mcp.pack.PackInstalls;
 import io.github.kangwooju.doclens.mcp.pack.dto.InstalledPack;
 
-@DisplayName("InstalledPackStore")
+@DisplayName("설치 Pack 탐색")
 class InstalledPackStoreTests {
 
     private static final String OTHER_BUILD = "22222222-2222-4222-8222-222222222222";
@@ -126,7 +126,7 @@ class InstalledPackStoreTests {
     }
 
     @Test
-    @DisplayName("심볼릭 링크 파일·디렉터리 거절")
+    @DisplayName("심볼릭 링크 파일과 디렉터리 거절")
     void skipsSymbolicLinks() throws IOException {
 
         Path file = PackInstalls
@@ -249,7 +249,7 @@ class InstalledPackStoreTests {
         }
     }
 
-    // 문서 하나·청크 하나 기본 Pack builder
+    // 문서 하나, 청크 하나인 기본 Pack builder
     private static TestPacks.Builder pack() {
 
         return TestPacks

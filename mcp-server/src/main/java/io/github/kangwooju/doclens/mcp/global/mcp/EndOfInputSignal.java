@@ -5,20 +5,18 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.concurrent.CountDownLatch;
 
-/**
- * 입력 끝(EOF·읽기 실패·닫기·세션 종료) 신호를 내는 stdin 래퍼
- *
- * <p>MCP 클라이언트가 stdin을 닫으면 서버 종료 시작
- */
+/** stdin 래퍼, 입력이 끝나면 서버 종료 신호 */
 public final class EndOfInputSignal extends FilterInputStream {
 
     private final CountDownLatch ended = new CountDownLatch(1);
 
+    /** 감쌀 입력 스트림 */
     public EndOfInputSignal(InputStream input) {
 
         super(input);
     }
 
+    /** 한 바이트 읽기, 끝이나 오류면 종료 신호 */
     @Override
     public int read() throws IOException {
 
@@ -33,6 +31,7 @@ public final class EndOfInputSignal extends FilterInputStream {
         }
     }
 
+    /** 버퍼 읽기, 끝이나 오류면 종료 신호 */
     @Override
     public int read(
             byte[] buffer,
@@ -55,6 +54,7 @@ public final class EndOfInputSignal extends FilterInputStream {
         }
     }
 
+    /** 종료 신호 후 스트림 닫기 */
     @Override
     public void close() throws IOException {
 

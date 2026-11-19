@@ -15,10 +15,8 @@ import tools.jackson.core.StreamReadFeature;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Canonical JSON 직렬화(contracts/v1 golden 값 기준)
- *
- * <p>키는 Unicode code point 오름차순, 공백 없는 구분자, 문자열 값은 NFC,
- * 최소 escape, 마지막 줄바꿈 생략, 숫자는 정수만 허용
+ * Canonical JSON 직렬화
+ * 키는 code point 순 정렬, 공백 없음, 문자열은 NFC, 숫자는 정수만 허용
  */
 public final class CanonicalJson {
 
@@ -27,6 +25,7 @@ public final class CanonicalJson {
             .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
             .build();
 
+    // 정적 메서드 전용
     private CanonicalJson() {
     }
 

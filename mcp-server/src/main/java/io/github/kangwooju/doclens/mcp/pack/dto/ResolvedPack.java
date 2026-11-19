@@ -1,10 +1,6 @@
 package io.github.kangwooju.doclens.mcp.pack.dto;
 
-/**
- * 응답의 resolved·installedBuilds 항목(D16)
- *
- * <p>publicationSequence는 Pack에 없는 값이라 null(C·D 단계에서 채울 공백)
- */
+/** 응답에 넣는 Pack 정보, publicationSequence는 아직 null */
 public record ResolvedPack(
         String packId,
         String buildId,

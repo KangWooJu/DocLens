@@ -18,21 +18,17 @@ import java.util.stream.Stream;
 
 import org.springframework.stereotype.Component;
 
-import io.github.kangwooju.doclens.core.pack.PackFiles;
-import io.github.kangwooju.doclens.core.pack.PackInfo;
-import io.github.kangwooju.doclens.core.pack.PackReader;
-import io.github.kangwooju.doclens.core.pack.PackValidationException;
+import io.github.kangwooju.doclens.core.pack.dto.PackInfo;
+import io.github.kangwooju.doclens.core.pack.exception.PackValidationException;
+import io.github.kangwooju.doclens.core.pack.reader.PackReader;
+import io.github.kangwooju.doclens.core.pack.support.PackFiles;
 import io.github.kangwooju.doclens.mcp.global.cache.CacheDirectory;
 import io.github.kangwooju.doclens.mcp.pack.dto.InstalledPack;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * 캐시의 설치 Pack 찾기와 프로세스 수명 동안의 읽기 전용 Reader 보관
- *
- * <p>시작 시 한 번 `packs/<packId>/<buildId>/<sha256>.pack`만 훑음(MC07 실행 중 조합 고정)
- * <p>심볼릭 링크·캐시 밖 실제 경로·이름과 다른 SHA-256·검증 실패·디렉터리와 다른 packId/buildId,
- * 이미 찾은 buildId의 두 번째 파일은 건너뜀
- * <p>다운로드·설치 세대·잠금은 배포 단계 몫
+ * 캐시에 설치된 Pack 탐색과 Reader 보관
+ * 시작 시 한 번만 탐색, 경로나 체크섬이 맞지 않는 파일 제외
  */
 @Slf4j
 @Component
@@ -43,9 +39,10 @@ public class InstalledPackStore implements AutoCloseable {
 
     private final Map<InstalledPack, PackReader> readers;
 
+    /** 캐시의 설치 Pack을 훑어 Reader 준비 */
     public InstalledPackStore(CacheDirectory cacheDirectory) {
 
-        // ponytail: 시작 시 동기 검증, 큰 Pack·다운로드가 생기면 STARTING·VERIFYING 단계의 비동기 설치로 전환
+        // 시작할 때 동기로 검증
         readers = Collections
                 .unmodifiableMap(scan(cacheDirectory
                         .packs()));
@@ -77,6 +74,7 @@ public class InstalledPackStore implements AutoCloseable {
                 .query(query);
     }
 
+    /** 열어 둔 Reader 모두 닫기 */
     @Override
     public void close() {
 
@@ -122,7 +120,7 @@ public class InstalledPackStore implements AutoCloseable {
         return found;
     }
 
-    // Pack 파일 하나의 경로·체크섬·내용·위치 확인 뒤 found에 추가, 거절 시 이유 기록
+    // Pack 파일 하나 검사 후 found에 추가, 거절 시 이유 기록
     private static void open(
             Path realRoot,
             Path file,

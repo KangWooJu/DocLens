@@ -4,9 +4,7 @@ import java.util.List;
 
 import io.github.kangwooju.doclens.mcp.pack.dto.InstalledPack;
 
-/**
- * list_projects의 PROJECT 결과 하나(D16), text·citation은 항상 null
- */
+/** list_projects 결과 하나, text와 citation은 null */
 public record ProjectResult(
         String kind,
         String id,

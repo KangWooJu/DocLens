@@ -8,18 +8,15 @@ import org.springframework.stereotype.Service;
 import io.github.kangwooju.doclens.mcp.pack.dto.InstalledPack;
 import io.github.kangwooju.doclens.mcp.pack.store.InstalledPackStore;
 import io.github.kangwooju.doclens.mcp.search.dto.ChunkHit;
-import io.github.kangwooju.doclens.mcp.search.dto.SearchTerms;
 import io.github.kangwooju.doclens.mcp.search.repository.ChunkSearchRepository;
 import lombok.RequiredArgsConstructor;
 
-/**
- * 설치 Pack 하나의 청크 후보 검색
- */
+/** 설치 Pack 하나의 청크 후보 검색 */
 @Service
 @RequiredArgsConstructor
 public class SearchService {
 
-    /** 정렬 후보 상한(F12 기본 50) */
+    /** 후보 최대 개수 */
     public static final int CANDIDATE_CAP = 50;
 
     private final InstalledPackStore installedPackStore;
@@ -29,7 +26,7 @@ public class SearchService {
     /** 정렬된 청크 후보, 최대 CANDIDATE_CAP개 */
     public List<ChunkHit> candidates(
             InstalledPack pack,
-            SearchTerms terms,
+            String query,
             List<String> documentTypes
     ) {
 
@@ -40,7 +37,7 @@ public class SearchService {
                             connection -> chunkSearchRepository
                                     .find(
                                             connection,
-                                            terms,
+                                            query,
                                             documentTypes,
                                             CANDIDATE_CAP
                                     )
