@@ -6,8 +6,8 @@ import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 
-import io.github.kangwooju.doclens.mcp.global.response.Readiness;
-import io.github.kangwooju.doclens.mcp.global.response.UpdateStatus;
+import io.github.kangwooju.doclens.mcp.global.response.type.Readiness;
+import io.github.kangwooju.doclens.mcp.global.response.type.UpdateStatus;
 import io.github.kangwooju.doclens.mcp.pack.dto.InstalledPack;
 import io.github.kangwooju.doclens.mcp.pack.policy.VersionOrderPolicy;
 import io.github.kangwooju.doclens.mcp.pack.store.InstalledPackStore;
@@ -15,14 +15,13 @@ import lombok.RequiredArgsConstructor;
 
 /**
  * 설치 Pack 조회와 준비 상태 판정
- *
- * <p>순서 B는 서버와 최신 여부를 확인하지 않으므로 Pack이 있으면 READY_STALE(MC05·MC06)
+ * 서버 최신 확인 전이라 Pack이 있으면 READY_STALE
  */
 @Service
 @RequiredArgsConstructor
 public class InstalledPackService {
 
-    /** 순서 B에서 실제로 제공하는 능력(BM25 검색만) */
+    /** 제공하는 검색 방식 */
     public static final List<String> SERVED_CAPABILITIES = List
             .of("BM25");
 
@@ -30,7 +29,7 @@ public class InstalledPackService {
 
     private final VersionOrderPolicy versionOrderPolicy;
 
-    /** 설치 Pack 전체(project, 버전 순서, buildId 순) */
+    /** 설치 Pack 전체(프로젝트, 버전, buildId 순) */
     public List<InstalledPack> installed() {
 
         return installedPackStore
@@ -57,7 +56,7 @@ public class InstalledPackService {
                 .toList();
     }
 
-    /** project·정확 버전·buildId(선택)로 고른 Pack, 같은 버전 build가 여럿이면 가장 늦게 설치한 것 */
+    /** 프로젝트와 버전으로 고른 Pack, build가 여럿이면 가장 최근 설치 */
     public Optional<InstalledPack> resolve(
             String project,
             String exactVersion,

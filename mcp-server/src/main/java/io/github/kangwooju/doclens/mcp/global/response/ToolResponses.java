@@ -8,6 +8,13 @@ import java.util.function.Supplier;
 
 import org.springframework.stereotype.Component;
 
+import io.github.kangwooju.doclens.mcp.global.input.ToolArguments;
+import io.github.kangwooju.doclens.mcp.global.response.dto.Budget;
+import io.github.kangwooju.doclens.mcp.global.response.dto.ToolError;
+import io.github.kangwooju.doclens.mcp.global.response.dto.ToolSuccess;
+import io.github.kangwooju.doclens.mcp.global.response.exception.ToolFailureException;
+import io.github.kangwooju.doclens.mcp.global.response.type.Readiness;
+import io.github.kangwooju.doclens.mcp.global.response.type.ToolErrorCode;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCResponse;
@@ -15,33 +22,23 @@ import io.modelcontextprotocol.spec.McpSchema.TextContent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-/**
- * Tool 응답 조립과 응답 줄 전체 기준 예산 계산(D16)
- *
- * <p>wire 크기는 SDK와 같은 JSON mapper로 JSON-RPC 응답 전체를 직렬화해 측정
- * <p>Tool 처리 단계는 id 자리로 정수 id 최대 길이(20바이트)를 예약,
- * 전송 직전 실제 id로 다시 계산({@link #finalizeFor})
- */
+/** Tool 응답 조립과 예산 계산, 예산은 JSON-RPC 응답 한 줄 전체 크기 기준 */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class ToolResponses {
 
-    /** content에 넣는 고정 문구, 본문은 structuredContent에만 둠 */
+    /** content 고정 문구, 본문은 structuredContent 전용 */
     public static final String CONTENT_TEXT = "External source data.";
 
-    /** 예약용 id: 직렬화 길이가 가장 긴 정수(20바이트) */
+    /** 예산 계산용 임시 id, 가장 긴 정수(20바이트) */
     public static final Object RESERVED_ID = Long.MIN_VALUE;
 
     private static final int MAX_SETTLE_ROUNDS = 8;
 
     private final McpJsonMapper jsonMapper;
 
-    /**
-     * 예약 id 기준 예산에 들어가는 앞쪽 결과만 담은 성공 응답
-     *
-     * <p>뒤 결과부터 빼고 truncated 표시, 첫 결과도 넘치면 BUDGET_TOO_SMALL
-     */
+    /** 예산 안에 들어가는 결과만 담은 성공 응답, 첫 결과도 넘치면 BUDGET_TOO_SMALL */
     public CallToolResult success(
             Readiness readiness,
             Object resolved,
@@ -53,7 +50,7 @@ public class ToolResponses {
         int total = results
                 .size();
 
-        // ponytail: 뒤에서 하나씩 빼는 선형 탐색, 결과 상한 50이라 충분
+        // 뒤에서 하나씩 빼며 확인, 결과가 최대 50개라 선형 탐색으로 충분
         for (int count = total; count > 0; count--) {
             ToolSuccess settled = settle(
                     ToolSuccess
@@ -246,9 +243,9 @@ public class ToolResponses {
             Object requestId
     ) {
 
-        long candidate = ToolArguments.MIN_BUDGET;
+        long candidate = Budget.MIN;
 
-        while (candidate <= ToolArguments.MAX_BUDGET) {
+        while (candidate <= Budget.MAX) {
             ToolSuccess settled = settle(
                     draft
                             .withBudget(Budget

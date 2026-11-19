@@ -16,13 +16,13 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 
 import io.github.kangwooju.doclens.mcp.global.cache.CacheDirectory;
-import io.github.kangwooju.doclens.mcp.global.mcp.ProtocolStreams;
-import io.github.kangwooju.doclens.mcp.global.mcp.ServerIdentity;
+import io.github.kangwooju.doclens.mcp.global.mcp.dto.ProtocolStreams;
+import io.github.kangwooju.doclens.mcp.global.mcp.dto.ServerIdentity;
 import io.github.kangwooju.doclens.mcp.status.tool.GetStatusTool;
 import io.modelcontextprotocol.server.McpSyncServer;
 
 @SpringBootTest
-@DisplayName("McpServerApplication")
+@DisplayName("MCP 서버 애플리케이션")
 class McpServerApplicationTests {
 
     @Autowired
@@ -35,7 +35,7 @@ class McpServerApplicationTests {
     ServerIdentity serverIdentity;
 
     @Test
-    @DisplayName("스프링 애플리케이션 컨텍스트 로딩과 MCP 서버·get_status 등록")
+    @DisplayName("스프링 컨텍스트 로딩과 MCP 서버, get_status 등록")
     void contextLoads() {
 
         assertNotNull(mcpServer);

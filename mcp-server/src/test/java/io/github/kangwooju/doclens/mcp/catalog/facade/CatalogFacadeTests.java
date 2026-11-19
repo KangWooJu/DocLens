@@ -14,20 +14,20 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import io.github.kangwooju.doclens.core.pack.TestPacks;
+import io.github.kangwooju.doclens.core.pack.fixture.TestPacks;
 import io.github.kangwooju.doclens.mcp.catalog.dto.CatalogPage;
 import io.github.kangwooju.doclens.mcp.catalog.dto.ProjectResult;
 import io.github.kangwooju.doclens.mcp.catalog.dto.VersionResult;
 import io.github.kangwooju.doclens.mcp.global.cache.CacheDirectory;
-import io.github.kangwooju.doclens.mcp.global.response.Readiness;
-import io.github.kangwooju.doclens.mcp.global.response.ToolErrorCode;
-import io.github.kangwooju.doclens.mcp.global.response.ToolFailureException;
+import io.github.kangwooju.doclens.mcp.global.response.exception.ToolFailureException;
+import io.github.kangwooju.doclens.mcp.global.response.type.Readiness;
+import io.github.kangwooju.doclens.mcp.global.response.type.ToolErrorCode;
 import io.github.kangwooju.doclens.mcp.pack.PackInstalls;
 import io.github.kangwooju.doclens.mcp.pack.policy.VersionOrderPolicy;
 import io.github.kangwooju.doclens.mcp.pack.service.InstalledPackService;
 import io.github.kangwooju.doclens.mcp.pack.store.InstalledPackStore;
 
-@DisplayName("CatalogFacade")
+@DisplayName("프로젝트, 버전 목록 Facade")
 class CatalogFacadeTests {
 
     @TempDir
@@ -37,6 +37,7 @@ class CatalogFacadeTests {
 
     private CatalogFacade facade;
 
+    // 프로젝트 둘, 버전 셋 설치
     @BeforeEach
     void installPacks() {
 
@@ -67,6 +68,7 @@ class CatalogFacadeTests {
         ));
     }
 
+    // Store Reader 닫기
     @AfterEach
     void closeStore() {
 
@@ -75,7 +77,7 @@ class CatalogFacadeTests {
     }
 
     @Test
-    @DisplayName("프로젝트별 버전·build 개수와 limit 초과 표시")
+    @DisplayName("프로젝트별 버전, build 개수와 limit 초과 표시")
     void listsProjects() {
 
         CatalogPage page = facade
@@ -129,7 +131,7 @@ class CatalogFacadeTests {
     }
 
     @Test
-    @DisplayName("버전 순서·buildId 순서의 버전 목록")
+    @DisplayName("버전 순서와 buildId 순서의 버전 목록")
     void listsVersionsInOrder() {
 
         List<String> ids = facade
@@ -174,7 +176,7 @@ class CatalogFacadeTests {
         );
     }
 
-    // 프로젝트·버전·buildId 지정 Pack 설치
+    // 프로젝트, 버전, buildId를 지정한 Pack 설치
     private void install(
             String project,
             String version,

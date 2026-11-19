@@ -6,9 +6,9 @@ import java.util.Set;
 
 import org.springframework.stereotype.Component;
 
+import io.github.kangwooju.doclens.mcp.global.input.ToolArguments;
+import io.github.kangwooju.doclens.mcp.global.input.ToolDefinitions;
 import io.github.kangwooju.doclens.mcp.global.mcp.McpToolEndpoint;
-import io.github.kangwooju.doclens.mcp.global.mcp.ToolDefinitions;
-import io.github.kangwooju.doclens.mcp.global.response.ToolArguments;
 import io.github.kangwooju.doclens.mcp.global.response.ToolResponses;
 import io.github.kangwooju.doclens.mcp.status.dto.StatusResult;
 import io.github.kangwooju.doclens.mcp.status.facade.StatusFacade;
@@ -17,9 +17,7 @@ import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import lombok.RequiredArgsConstructor;
 
-/**
- * get_status Tool 진입부: 준비 상태·프로그램·프로토콜 버전 조회
- */
+/** get_status Tool, 서버 상태 조회 */
 @Component
 @RequiredArgsConstructor
 public class GetStatusTool implements McpToolEndpoint {
@@ -34,6 +32,7 @@ public class GetStatusTool implements McpToolEndpoint {
 
     private final ToolResponses toolResponses;
 
+    /** get_status Tool 등록 정보 */
     @Override
     public SyncToolSpecification specification() {
 
@@ -74,7 +73,7 @@ public class GetStatusTool implements McpToolEndpoint {
                 );
     }
 
-    // Tool 이름·설명·입력 schema·읽기 전용 표시
+    // Tool 정의(이름, 설명, 입력 schema)
     private static Tool definition() {
 
         return ToolDefinitions

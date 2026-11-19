@@ -7,6 +7,7 @@ import io.github.kangwooju.doclens.mcp.pack.policy.VersionOrderPolicy;
 import io.github.kangwooju.doclens.mcp.pack.service.InstalledPackService;
 import io.github.kangwooju.doclens.mcp.pack.store.InstalledPackStore;
 import io.github.kangwooju.doclens.mcp.search.converter.HeadingPathConverter;
+import io.github.kangwooju.doclens.mcp.search.converter.SearchTermsConverter;
 import io.github.kangwooju.doclens.mcp.search.facade.SearchFacade;
 import io.github.kangwooju.doclens.mcp.search.repository.ChunkSearchRepository;
 import io.github.kangwooju.doclens.mcp.search.service.SearchService;
@@ -31,7 +32,10 @@ public record SearchFixtures(
         );
         SearchService searchService = new SearchService(
                 store,
-                new ChunkSearchRepository(new HeadingPathConverter())
+                new ChunkSearchRepository(
+                        new HeadingPathConverter(),
+                        new SearchTermsConverter()
+                )
         );
 
         return new SearchFixtures(
@@ -45,6 +49,7 @@ public record SearchFixtures(
         );
     }
 
+    /** Store가 연 Reader 닫기 */
     @Override
     public void close() {
 

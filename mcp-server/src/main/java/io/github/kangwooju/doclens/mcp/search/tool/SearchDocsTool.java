@@ -7,12 +7,13 @@ import java.util.Set;
 
 import org.springframework.stereotype.Component;
 
+import io.github.kangwooju.doclens.mcp.global.input.ToolArguments;
+import io.github.kangwooju.doclens.mcp.global.input.ToolDefinitions;
 import io.github.kangwooju.doclens.mcp.global.mcp.McpToolEndpoint;
-import io.github.kangwooju.doclens.mcp.global.mcp.ToolDefinitions;
-import io.github.kangwooju.doclens.mcp.global.response.ToolArguments;
-import io.github.kangwooju.doclens.mcp.global.response.ToolErrorCode;
-import io.github.kangwooju.doclens.mcp.global.response.ToolFailureException;
 import io.github.kangwooju.doclens.mcp.global.response.ToolResponses;
+import io.github.kangwooju.doclens.mcp.global.response.exception.InvalidToolInputException;
+import io.github.kangwooju.doclens.mcp.global.response.exception.ToolFailureException;
+import io.github.kangwooju.doclens.mcp.global.response.type.ToolErrorCode;
 import io.github.kangwooju.doclens.mcp.search.dto.SearchPage;
 import io.github.kangwooju.doclens.mcp.search.dto.SearchRequest;
 import io.github.kangwooju.doclens.mcp.search.facade.SearchFacade;
@@ -21,11 +22,7 @@ import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import lombok.RequiredArgsConstructor;
 
-/**
- * search_docs Tool 진입부: 설치 Pack 하나의 BM25 문서 검색
- *
- * <p>cursor·variantPreference는 순서 B에서 받지 않음
- */
+/** search_docs Tool, 설치 Pack 하나에서 BM25 검색 */
 @Component
 @RequiredArgsConstructor
 public class SearchDocsTool implements McpToolEndpoint {
@@ -64,6 +61,7 @@ public class SearchDocsTool implements McpToolEndpoint {
 
     private final ToolResponses toolResponses;
 
+    /** search_docs Tool 등록 정보 */
     @Override
     public SyncToolSpecification specification() {
 
@@ -148,16 +146,29 @@ public class SearchDocsTool implements McpToolEndpoint {
                                 MAX_TOP_K,
                                 DEFAULT_TOP_K
                         ),
-                ToolArguments
-                        .textList(
-                                arguments,
-                                DOCUMENT_TYPES,
-                                MAX_DOCUMENT_TYPES
-                        )
+                documentTypes(arguments)
         );
     }
 
-    // Tool 이름·설명·입력 schema·읽기 전용 표시
+    // 알려진 Pack 문서 유형만 담은 documentTypes 인자
+    private static List<String> documentTypes(Map<String, Object> arguments) {
+
+        List<String> documentTypes = ToolArguments
+                .textList(
+                        arguments,
+                        DOCUMENT_TYPES,
+                        MAX_DOCUMENT_TYPES
+                );
+
+        if (!SearchRequest.DOCUMENT_TYPES
+                .containsAll(documentTypes)) {
+            throw new InvalidToolInputException("unknown document type");
+        }
+
+        return documentTypes;
+    }
+
+    // Tool 정의(이름, 설명, 입력 schema)
     private static Tool definition() {
 
         return ToolDefinitions

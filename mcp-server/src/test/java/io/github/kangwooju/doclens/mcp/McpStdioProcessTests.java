@@ -24,15 +24,12 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import io.github.kangwooju.doclens.core.pack.TestPacks;
+import io.github.kangwooju.doclens.core.pack.fixture.TestPacks;
 import io.github.kangwooju.doclens.mcp.pack.PackInstalls;
-
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-/**
- * 실제 자식 JVM으로 띄운 서버의 stdout·종료 동작 시험
- */
+/** 자식 JVM으로 띄운 서버의 stdout과 종료 시험 */
 @DisplayName("STDIO MCP 프로세스")
 class McpStdioProcessTests {
 
@@ -49,6 +46,7 @@ class McpStdioProcessTests {
 
     private final List<String> stdoutLines = new ArrayList<>();
 
+    // 남은 서버 프로세스 강제 종료
     @AfterEach
     void stopProcess() {
 
@@ -325,7 +323,7 @@ class McpStdioProcessTests {
     }
 
     @Test
-    @DisplayName("설치 Pack의 get_status·list_projects·list_versions·search_docs 응답과 정확한 wireBytes")
+    @DisplayName("설치 Pack 기준 4개 Tool 응답과 정확한 wireBytes")
     void servesInstalledPacks() throws Exception {
 
         PackInstalls
@@ -526,6 +524,21 @@ class McpStdioProcessTests {
         assertEquals(
                 "INVALID_INPUT",
                 withCursor
+                        .at("/result/structuredContent/code")
+                        .asString()
+        );
+
+        JsonNode unknownType = request(
+                stdin,
+                stdout,
+                "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":"
+                        + "{\"name\":\"search_docs\",\"arguments\":{\"query\":\"spring\","
+                        + "\"project\":\"spring-boot\",\"exactVersion\":\"4.0.0\",\"documentTypes\":[\"tutorial\"]}}}"
+        );
+
+        assertEquals(
+                "INVALID_INPUT",
+                unknownType
                         .at("/result/structuredContent/code")
                         .asString()
         );

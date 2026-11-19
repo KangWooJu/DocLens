@@ -4,26 +4,23 @@ import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Map;
 
-/**
- * DocLens 로컬 캐시 루트
- *
- * <p>`DOCLENS_CACHE`(절대 경로)가 있으면 그 경로, 없으면 OS 기본 경로
- * <p>macOS `~/Library/Caches/doclens`, Windows `%LOCALAPPDATA%/doclens/cache`,
- * 그 밖 `${XDG_CACHE_HOME:-~/.cache}/doclens`
- */
-public record CacheDirectory(Path root) {
+/** DocLens 로컬 캐시 루트, DOCLENS_CACHE가 없으면 OS 기본 캐시 경로 */
+public final class CacheDirectory {
 
     /** 캐시 루트 지정 환경 변수 이름 */
     public static final String ENVIRONMENT_VARIABLE = "DOCLENS_CACHE";
 
-    public CacheDirectory {
+    private final Path root;
+
+    /** 절대 경로만 허용, 정규화한 경로 보관 */
+    public CacheDirectory(Path root) {
 
         if (root == null || !root
                 .isAbsolute()) {
             throw new IllegalStateException("cache root must be an absolute path");
         }
 
-        root = root
+        this.root = root
                 .normalize();
     }
 
@@ -91,6 +88,12 @@ public record CacheDirectory(Path root) {
 
         return new CacheDirectory(base
                 .resolve("doclens"));
+    }
+
+    /** 캐시 루트 */
+    public Path root() {
+
+        return root;
     }
 
     /** 로그 디렉터리 */

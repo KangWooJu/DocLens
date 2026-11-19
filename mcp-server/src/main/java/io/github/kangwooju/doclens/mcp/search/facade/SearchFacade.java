@@ -5,8 +5,8 @@ import java.util.stream.IntStream;
 
 import org.springframework.stereotype.Component;
 
-import io.github.kangwooju.doclens.mcp.global.response.ToolErrorCode;
-import io.github.kangwooju.doclens.mcp.global.response.ToolFailureException;
+import io.github.kangwooju.doclens.mcp.global.response.exception.ToolFailureException;
+import io.github.kangwooju.doclens.mcp.global.response.type.ToolErrorCode;
 import io.github.kangwooju.doclens.mcp.pack.dto.InstalledPack;
 import io.github.kangwooju.doclens.mcp.pack.dto.ResolvedPack;
 import io.github.kangwooju.doclens.mcp.pack.service.InstalledPackService;
@@ -14,13 +14,10 @@ import io.github.kangwooju.doclens.mcp.search.dto.ChunkHit;
 import io.github.kangwooju.doclens.mcp.search.dto.ChunkResult;
 import io.github.kangwooju.doclens.mcp.search.dto.SearchPage;
 import io.github.kangwooju.doclens.mcp.search.dto.SearchRequest;
-import io.github.kangwooju.doclens.mcp.search.dto.SearchTerms;
 import io.github.kangwooju.doclens.mcp.search.service.SearchService;
 import lombok.RequiredArgsConstructor;
 
-/**
- * 문서 검색 Facade: 설치 Pack 하나 고르기, 후보 검색, topK 결과 조립
- */
+/** 문서 검색 Facade */
 @Component
 @RequiredArgsConstructor
 public class SearchFacade {
@@ -29,7 +26,7 @@ public class SearchFacade {
 
     private final SearchService searchService;
 
-    /** 요청한 프로젝트·정확 버전 Pack의 검색 결과, Pack이 없으면 NOT_READY, 맞는 Pack이 없으면 NOT_FOUND */
+    /** 요청한 프로젝트와 버전의 Pack 검색, 설치 Pack이 없으면 NOT_READY, 맞는 Pack이 없으면 NOT_FOUND */
     public SearchPage search(SearchRequest request) {
 
         if (installedPackService
@@ -51,9 +48,8 @@ public class SearchFacade {
         List<ChunkHit> hits = searchService
                 .candidates(
                         pack,
-                        SearchTerms
-                                .from(request
-                                        .query()),
+                        request
+                                .query(),
                         request
                                 .documentTypes()
                 );

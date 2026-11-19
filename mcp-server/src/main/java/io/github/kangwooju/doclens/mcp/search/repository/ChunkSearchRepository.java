@@ -11,16 +11,14 @@ import java.util.List;
 import org.springframework.stereotype.Repository;
 
 import io.github.kangwooju.doclens.mcp.search.converter.HeadingPathConverter;
+import io.github.kangwooju.doclens.mcp.search.converter.SearchTermsConverter;
 import io.github.kangwooju.doclens.mcp.search.dto.ChunkHit;
 import io.github.kangwooju.doclens.mcp.search.dto.SearchTerms;
 import lombok.RequiredArgsConstructor;
 
 /**
- * Pack 하나에서 청크 후보를 찾는 검색 SQL(F12)
- *
- * <p>BM25 갈래와 정확 식별자 갈래를 개수 제한 전에 합치고 청크 rowid로 하나만 남김
- * <p>정렬: 정확 일치 먼저, bm25 오름차순(점수 없음은 뒤), chunkId BINARY
- * <p>documentTypes 조건은 합친 뒤 두 갈래에 똑같이 적용
+ * Pack 하나의 청크 후보 검색 SQL
+ * BM25 결과와 식별자 일치 결과를 합친 뒤 식별자 일치, bm25 점수, chunkId 순 정렬
  */
 @Repository
 @RequiredArgsConstructor
@@ -28,17 +26,20 @@ public class ChunkSearchRepository {
 
     private final HeadingPathConverter headingPathConverter;
 
+    private final SearchTermsConverter searchTermsConverter;
+
     /** 정렬된 청크 후보, 최대 limit개 */
     public List<ChunkHit> find(
             Connection connection,
-            SearchTerms terms,
+            String query,
             List<String> documentTypes,
             int limit
     ) throws SQLException {
 
         List<Object> parameters = new ArrayList<>();
         String sql = sql(
-                terms,
+                searchTermsConverter
+                        .toTerms(query),
                 documentTypes,
                 parameters
         );

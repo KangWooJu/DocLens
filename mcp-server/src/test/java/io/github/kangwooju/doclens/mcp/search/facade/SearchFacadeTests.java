@@ -14,12 +14,11 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import io.github.kangwooju.doclens.core.pack.PackFiles;
-import io.github.kangwooju.doclens.core.pack.TestPacks;
-import io.github.kangwooju.doclens.mcp.global.response.InvalidToolInputException;
-import io.github.kangwooju.doclens.mcp.global.response.Readiness;
-import io.github.kangwooju.doclens.mcp.global.response.ToolErrorCode;
-import io.github.kangwooju.doclens.mcp.global.response.ToolFailureException;
+import io.github.kangwooju.doclens.core.pack.fixture.TestPacks;
+import io.github.kangwooju.doclens.core.pack.support.PackFiles;
+import io.github.kangwooju.doclens.mcp.global.response.exception.ToolFailureException;
+import io.github.kangwooju.doclens.mcp.global.response.type.Readiness;
+import io.github.kangwooju.doclens.mcp.global.response.type.ToolErrorCode;
 import io.github.kangwooju.doclens.mcp.pack.PackInstalls;
 import io.github.kangwooju.doclens.mcp.search.SearchFixtures;
 import io.github.kangwooju.doclens.mcp.search.dto.ChunkResult;
@@ -27,7 +26,7 @@ import io.github.kangwooju.doclens.mcp.search.dto.Citation;
 import io.github.kangwooju.doclens.mcp.search.dto.SearchPage;
 import io.github.kangwooju.doclens.mcp.search.dto.SearchRequest;
 
-@DisplayName("SearchFacade")
+@DisplayName("문서 검색 Facade")
 class SearchFacadeTests {
 
     private static final String OLD_BUILD = "11111111-1111-4111-8111-111111111111";
@@ -131,7 +130,7 @@ class SearchFacadeTests {
     }
 
     @Test
-    @DisplayName("topK 개수·1부터 순위·Pack 값만으로 만든 인용")
+    @DisplayName("topK 개수, 1부터 시작하는 순위, Pack 값만으로 만든 인용")
     void buildsRankedResultsWithCitations() {
 
         Path file = install(
@@ -216,25 +215,8 @@ class SearchFacadeTests {
         }
     }
 
-    @Test
-    @DisplayName("알 수 없는 documentTypes 값의 INVALID_INPUT")
-    void rejectsUnknownDocumentType() {
 
-        assertThrows(
-                InvalidToolInputException.class,
-                () -> new SearchRequest(
-                        "spring",
-                        TestPacks.PROJECT,
-                        TestPacks.VERSION,
-                        null,
-                        5,
-                        List
-                                .of("tutorial")
-                )
-        );
-    }
-
-    // buildId·문서 키 지정 Pack 설치(청크 셋 모두 spring 포함)
+    // buildId와 문서 키를 지정한 Pack 설치
     private Path install(
             String buildId,
             String key

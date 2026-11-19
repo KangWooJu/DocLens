@@ -13,15 +13,14 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import io.github.kangwooju.doclens.core.pack.DocumentType;
-import io.github.kangwooju.doclens.core.pack.TestPacks;
+import io.github.kangwooju.doclens.core.pack.fixture.TestPacks;
+import io.github.kangwooju.doclens.core.pack.type.DocumentType;
 import io.github.kangwooju.doclens.mcp.pack.PackInstalls;
 import io.github.kangwooju.doclens.mcp.pack.dto.InstalledPack;
 import io.github.kangwooju.doclens.mcp.search.SearchFixtures;
 import io.github.kangwooju.doclens.mcp.search.dto.ChunkHit;
-import io.github.kangwooju.doclens.mcp.search.dto.SearchTerms;
 
-@DisplayName("SearchService")
+@DisplayName("청크 후보 검색")
 class SearchServiceTests {
 
     private static final String IDENTIFIER = "C051Ident";
@@ -124,7 +123,7 @@ class SearchServiceTests {
     }
 
     @Test
-    @DisplayName("FTS5 연산자·따옴표·괄호 질의의 오류 없는 글자 그대로 검색")
+    @DisplayName("FTS5 연산자, 따옴표, 괄호가 든 질의의 글자 그대로 검색")
     void searchesOperatorsLiterally() {
 
         try (SearchFixtures search = install(TestPacks
@@ -169,7 +168,7 @@ class SearchServiceTests {
     }
 
     @Test
-    @DisplayName("documentTypes 조건의 BM25·정확 식별자 두 갈래 동일 적용과 동점 chunkId 순서")
+    @DisplayName("documentTypes 조건의 두 검색 경로 동일 적용과 동점 chunkId 순서")
     void filtersBothBranchesAndBreaksTies() {
 
         try (SearchFixtures search = install(TestPacks
@@ -274,8 +273,7 @@ class SearchServiceTests {
                 .searchService()
                 .candidates(
                         pack,
-                        SearchTerms
-                                .from(query),
+                        query,
                         documentTypes
                 );
     }

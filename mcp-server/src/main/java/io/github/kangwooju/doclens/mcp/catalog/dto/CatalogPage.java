@@ -2,17 +2,16 @@ package io.github.kangwooju.doclens.mcp.catalog.dto;
 
 import java.util.List;
 
-import io.github.kangwooju.doclens.mcp.global.response.Readiness;
+import io.github.kangwooju.doclens.mcp.global.response.type.Readiness;
 
-/**
- * 목록 Tool 응답 재료: 준비 상태, limit까지의 결과, limit 초과 여부
- */
+/** 목록 Tool 응답 데이터, limit까지 자른 결과와 truncated 여부 */
 public record CatalogPage(
         Readiness readiness,
         List<?> results,
         boolean truncated
 ) {
 
+    /** 결과 목록 불변 사본 */
     public CatalogPage {
 
         results = List

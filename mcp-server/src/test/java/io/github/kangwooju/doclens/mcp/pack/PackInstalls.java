@@ -5,15 +5,16 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-import io.github.kangwooju.doclens.core.pack.PackMeta;
-import io.github.kangwooju.doclens.core.pack.PackWriteResult;
-import io.github.kangwooju.doclens.core.pack.TestPacks;
+import io.github.kangwooju.doclens.core.pack.dto.PackMeta;
+import io.github.kangwooju.doclens.core.pack.dto.PackWriteResult;
+import io.github.kangwooju.doclens.core.pack.fixture.TestPacks;
 
 /**
  * 시험용 Pack을 캐시 설치 경로 `packs/<packId>/<buildId>/<sha256>.pack`에 놓는 도우미
  */
 public final class PackInstalls {
 
+    // 정적 도우미 전용
     private PackInstalls() {
     }
 

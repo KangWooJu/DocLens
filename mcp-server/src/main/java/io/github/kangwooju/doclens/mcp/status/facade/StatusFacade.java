@@ -2,15 +2,13 @@ package io.github.kangwooju.doclens.mcp.status.facade;
 
 import org.springframework.stereotype.Component;
 
-import io.github.kangwooju.doclens.mcp.global.mcp.ServerIdentity;
+import io.github.kangwooju.doclens.mcp.global.mcp.dto.ServerIdentity;
 import io.github.kangwooju.doclens.mcp.pack.dto.ResolvedPack;
 import io.github.kangwooju.doclens.mcp.pack.service.InstalledPackService;
 import io.github.kangwooju.doclens.mcp.status.dto.StatusResult;
 import lombok.RequiredArgsConstructor;
 
-/**
- * 서버 상태 조회 Facade
- */
+/** 서버 상태 조회 Facade */
 @Component
 @RequiredArgsConstructor
 public class StatusFacade {

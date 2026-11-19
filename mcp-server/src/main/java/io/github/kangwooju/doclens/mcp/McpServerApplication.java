@@ -11,13 +11,11 @@ import org.springframework.context.ConfigurableApplicationContext;
 
 import io.github.kangwooju.doclens.mcp.global.cache.CacheDirectory;
 import io.github.kangwooju.doclens.mcp.global.mcp.EndOfInputSignal;
-import io.github.kangwooju.doclens.mcp.global.mcp.ProtocolStreams;
+import io.github.kangwooju.doclens.mcp.global.mcp.dto.ProtocolStreams;
 
 /**
  * 로컬 STDIO MCP 서버 진입점
- *
- * <p>stdout은 JSON-RPC 전용, 그 밖의 System.out 출력은 stderr로 전환
- * <p>stdin 종료 또는 SDK 세션 종료 시 Spring 컨텍스트 종료와 프로세스 종료
+ * stdout은 JSON-RPC 전용, stdin이 닫히면 프로세스 종료
  */
 @SpringBootApplication
 public class McpServerApplication {
@@ -25,6 +23,7 @@ public class McpServerApplication {
     /** 로그 디렉터리 시스템 속성 이름(logback-spring.xml에서 사용) */
     public static final String LOG_DIR_PROPERTY = "doclens.log.dir";
 
+    /** stdout을 프로토콜 전용으로 분리한 뒤 서버 실행 */
     public static void main(String[] args) {
 
         OutputStream protocolOutput = new FileOutputStream(FileDescriptor.out);
