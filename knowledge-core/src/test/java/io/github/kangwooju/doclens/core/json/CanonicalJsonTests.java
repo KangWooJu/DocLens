@@ -16,7 +16,7 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
 
-@DisplayName("CanonicalJson")
+@DisplayName("Canonical JSON 직렬화")
 class CanonicalJsonTests {
 
     private static final Path CONTRACTS = Path
@@ -24,7 +24,7 @@ class CanonicalJsonTests {
                     .getProperty("doclens.contractsDir"));
 
     @Test
-    @DisplayName("계약 golden vector와 바이트·해시 일치")
+    @DisplayName("계약 golden vector와 바이트, 해시 일치")
     void matchesContractGoldenVectors() {
 
         List<Map<String, Object>> vectors = JsonMapper

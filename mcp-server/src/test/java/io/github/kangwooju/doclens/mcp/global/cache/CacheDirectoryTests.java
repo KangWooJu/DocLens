@@ -9,7 +9,7 @@ import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-@DisplayName("CacheDirectory")
+@DisplayName("캐시 루트 결정")
 class CacheDirectoryTests {
 
     @Test

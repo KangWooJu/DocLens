@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
-@DisplayName("SchedulerServerApplication")
+@DisplayName("scheduler-server 애플리케이션")
 class SchedulerServerApplicationTests {
 
     @Test

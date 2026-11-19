@@ -7,7 +7,7 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-@DisplayName("VersionOrderPolicy")
+@DisplayName("버전 정렬 규칙")
 class VersionOrderPolicyTests {
 
     private final VersionOrderPolicy policy = new VersionOrderPolicy();

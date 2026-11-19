@@ -5,14 +5,13 @@ import java.util.Comparator;
 import org.springframework.stereotype.Component;
 
 /**
- * 정확 버전 정렬 규칙
- *
- * <p>`-` 앞 본 버전은 `.` 단위로 비교(숫자끼리는 수 크기, 그 밖은 문자열),
- * 같으면 수식어 없는 정식 버전이 수식어 버전(M1, RC1 등)보다 뒤
+ * 버전 정렬 규칙
+ * 숫자는 크기 비교, 정식 버전은 M1, RC1 같은 수식어 버전 뒤
  */
 @Component
 public class VersionOrderPolicy implements Comparator<String> {
 
+    /** 본 버전 비교 후 같으면 수식어 비교 */
     @Override
     public int compare(
             String left,

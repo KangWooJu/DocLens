@@ -2,9 +2,7 @@ package io.github.kangwooju.doclens.mcp.catalog.dto;
 
 import io.github.kangwooju.doclens.mcp.pack.dto.InstalledPack;
 
-/**
- * list_versions의 VERSION 결과 하나(D16), id는 `<packId>/<buildId>`
- */
+/** list_versions 결과 하나, id는 `<packId>/<buildId>` */
 public record VersionResult(
         String kind,
         String id,

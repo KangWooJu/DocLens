@@ -1,10 +1,6 @@
 package io.github.kangwooju.doclens.mcp.search.dto;
 
-/**
- * CHUNK 결과 속성(D16), 순서 B는 BM25만 써서 vectorScore·rrfScore는 null
- *
- * <p>blockIds는 Pack에 블록 ID가 없어 내지 않음(F19 공백)
- */
+/** CHUNK 결과 속성, 지금은 BM25만 써서 vectorScore와 rrfScore는 null */
 public record ChunkAttributes(
         String documentId,
         String sectionId,
