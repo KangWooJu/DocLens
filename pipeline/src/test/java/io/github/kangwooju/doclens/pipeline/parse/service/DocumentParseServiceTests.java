@@ -807,6 +807,183 @@ class DocumentParseServiceTests {
         );
     }
 
+    @Test
+    @DisplayName("첫 heading이 1단계 제목이 아니면 보류, discrete heading은 섹션이 아닌 문단")
+    void requiresTitleAndKeepsDiscreteHeadings() {
+
+        assertHold(
+                HoldReason.TITLE_MISSING,
+                "<html><head><meta name=\"version\" content=\"4.1.2\"></head><body><article class=\"doc\">"
+                        + "<div class=\"sect1\"><h2 id=\"x\">X</h2><div class=\"paragraph\"><p>a</p></div></div></article></body></html>"
+        );
+
+        StructuredDocument document = parse(ParseFixtures
+                .page("<div class=\"sect1\"><h2 id=\"y\">Y</h2><div class=\"sectionbody\"><h3 id=\"d\" class=\"discrete\">D</h3>"
+                        + "<div class=\"paragraph\"><p>after</p></div></div></div>"));
+
+        assertEquals(
+                2,
+                document
+                        .sections()
+                        .size()
+        );
+        assertEquals(
+                List
+                        .of(
+                                "D",
+                                "after"
+                        ),
+                document
+                        .sections()
+                        .get(1)
+                        .blocks()
+                        .stream()
+                        .map(Block::text)
+                        .toList()
+        );
+    }
+
+    @Test
+    @DisplayName("admonition 안 admonition과 그림 제목은 순서대로, 원래 admonition에 이어 붙임")
+    void keepsNestedAdmonitionOrder() {
+
+        List<Block> blocks = parse(ParseFixtures
+                .page("<div class=\"admonitionblock note\"><table><tr><td class=\"content\">"
+                        + "<div class=\"paragraph\"><p>A</p></div>"
+                        + "<div class=\"admonitionblock tip\"><table><tr><td class=\"content\"><div class=\"paragraph\"><p>B</p></div></td></tr></table></div>"
+                        + "<div class=\"paragraph\"><p>C</p></div>"
+                        + "<div class=\"imageblock\"><div class=\"title\">Figure 1</div></div>"
+                        + "</td></tr></table></div>"))
+                .sections()
+                .getFirst()
+                .blocks();
+
+        assertEquals(
+                List
+                        .of(
+                                "A",
+                                "B",
+                                "C\nFigure 1"
+                        ),
+                blocks
+                        .stream()
+                        .map(Block::text)
+                        .toList()
+        );
+        assertEquals(
+                List
+                        .of(
+                                "note",
+                                "tip",
+                                "note"
+                        ),
+                blocks
+                        .stream()
+                        .map(Block::admonitionType)
+                        .toList()
+        );
+    }
+
+    @Test
+    @DisplayName("ol start 0, 가로 정의 목록의 중첩 행은 한 번만")
+    void listEdgeCases() {
+
+        List<Block> blocks = parse(ParseFixtures
+                .page("<div class=\"olist\"><ol start=\"0\"><li><p>a</p></li><li><p>b</p></li></ol></div>"
+                        + "<div class=\"hdlist\"><table><tbody><tr><td class=\"hdlist1\">t1</td><td class=\"hdlist2\"><p>d1</p>"
+                        + "<div class=\"hdlist\"><table><tbody><tr><td class=\"hdlist1\">n1</td><td class=\"hdlist2\"><p>nd</p></td></tr></tbody></table></div>"
+                        + "</td></tr></tbody></table></div>"))
+                .sections()
+                .getFirst()
+                .blocks();
+
+        assertEquals(
+                "0. a\n1. b",
+                blocks
+                        .get(0)
+                        .text()
+        );
+        assertEquals(
+                "- t1: d1\n  - n1: nd",
+                blocks
+                        .get(1)
+                        .text()
+        );
+    }
+
+    @Test
+    @DisplayName("탭 그룹 제목은 블록 제목, 탭 그룹 안 다른 내용은 보류")
+    void keepsTabGroupTitle() {
+
+        String grouped = tabs(
+                "<li id=\"t_a\" class=\"tab\"><p>Java</p></li><li id=\"t_b\" class=\"tab\"><p>Kotlin</p></li>",
+                "t_a",
+                "t_b"
+        );
+
+        assertEquals(
+                "Config title",
+                parse(grouped
+                        .replace(
+                                "<div class=\"content\"><div class=\"ulist tablist\">",
+                                "<div class=\"title\">Config title</div><div class=\"content\"><div class=\"ulist tablist\">"
+                        ))
+                        .sections()
+                        .getFirst()
+                        .blocks()
+                        .getFirst()
+                        .title()
+        );
+        assertHold(
+                HoldReason.TAB_STRUCTURE_UNSUPPORTED,
+                grouped
+                        .replace(
+                                "<div class=\"ulist tablist\">",
+                                "<div class=\"paragraph\"><p>stray</p></div><div class=\"ulist tablist\">"
+                        )
+        );
+    }
+
+    @Test
+    @DisplayName("인라인 요소 경계에서 나뉜 결합 문자는 보류, 빠진 입력 값은 입력 오류")
+    void rejectsSplitCombiningAndMissingFields() {
+
+        assertHold(
+                HoldReason.INVALID_UNICODE,
+                ParseFixtures
+                        .page("<div class=\"paragraph\"><p>e<b>\u0301</b>x <code>y</code></p></div>")
+        );
+
+        var source = ParseFixtures
+                .source(REFERENCE);
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> ParseFixtures
+                        .service()
+                        .parse(new io.github.kangwooju.doclens.pipeline.parse.dto.SourceDocument(
+                                source
+                                        .documentId(),
+                                source
+                                        .project(),
+                                null,
+                                source
+                                        .documentType(),
+                                source
+                                        .canonicalUrl(),
+                                source
+                                        .originalUrl(),
+                                source
+                                        .finalUrl(),
+                                source
+                                        .sourceSnapshotId(),
+                                source
+                                        .rawSha256(),
+                                null
+                        ))
+        );
+    }
+
     // 시험 문서 파싱
     private static StructuredDocument parse(String html) {
 
