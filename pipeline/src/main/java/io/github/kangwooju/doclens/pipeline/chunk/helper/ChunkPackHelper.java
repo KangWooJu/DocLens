@@ -39,8 +39,8 @@ public class ChunkPackHelper {
     /** 이 크기를 넘는 표 caption과 header는 다음 조각에 반복하지 않음 */
     public static final int HEADER_REPEAT_MAX_BYTES = TARGET_BYTES / 2;
 
-    private static final int SEPARATOR_BYTES = TextNormalizer
-            .utf8Length(BlockRenderHelper.SEPARATOR);
+    // 청크 안 구성원 구분자 "\n\n"의 바이트 수, 렌더링 구분자와 같은 값
+    private static final int SEPARATOR_BYTES = 2;
 
     /** 섹션 하나의 청크 목록, 순서가 곧 섹션 안 청크 순번 */
     public List<ChunkDraft> pack(List<RenderedBlock> blocks) {
@@ -537,6 +537,7 @@ public class ChunkPackHelper {
     }
 
     // 표를 caption, header와 행 묶음으로 12000 이하 조각으로, 행 묶음 하나가 넘으면 그 묶음만 oversized
+    // 반복하지 않는 큰 header가 첫 행과 함께 넘으면 header만 먼저 한 조각, 본문 행이 없으면 표 전체 oversized
     private static List<ChunkPiece> tableSlices(RenderedBlock block) {
 
         String header = block
@@ -550,6 +551,60 @@ public class ChunkPackHelper {
         int index = 0;
         int count = units
                 .size();
+
+        if (units
+                .isEmpty()) {
+            return List
+                    .of(whole(
+                            block,
+                            true
+                    ));
+        }
+
+        boolean headerCrowdsFirstRow = !repeat && !header
+                .isEmpty() && TextNormalizer
+                        .utf8Length(header + "\n" + units
+                                .getFirst()
+                                .text()) > MAX_BYTES;
+
+        if (headerCrowdsFirstRow) {
+            int headerEnd = header
+                    .codePointCount(
+                            0,
+                            header
+                                    .length()
+                    );
+            int headerBytes = TextNormalizer
+                    .utf8Length(header);
+
+            slices
+                    .add(new ChunkPiece(
+                            block,
+                            header,
+                            headerBytes,
+                            0,
+                            headerEnd,
+                            false,
+                            0,
+                            0,
+                            block
+                                    .totalRows(),
+                            false,
+                            headerBytes > MAX_BYTES,
+                            block
+                                    .inlineCodes()
+                                    .stream()
+                                    .filter(code -> code
+                                            .start() < headerEnd)
+                                    .toList(),
+                            block
+                                    .links()
+                                    .stream()
+                                    .filter(link -> link
+                                            .start() < headerEnd)
+                                    .toList()
+                    ));
+        }
 
         while (index < count) {
             boolean first = slices
