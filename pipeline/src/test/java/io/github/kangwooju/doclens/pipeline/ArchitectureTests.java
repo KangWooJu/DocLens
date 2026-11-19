@@ -15,10 +15,15 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import com.tngtech.archunit.core.domain.Dependency;
+import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
+import com.tngtech.archunit.lang.ArchCondition;
 import com.tngtech.archunit.lang.ArchRule;
+import com.tngtech.archunit.lang.ConditionEvents;
+import com.tngtech.archunit.lang.SimpleConditionEvent;
 
 /** 계층 규칙 검사, global 패키지는 제외 */
 @DisplayName("pipeline 계층 규칙")
@@ -239,6 +244,49 @@ class ArchitectureTests {
     }
 
     @Test
+    @DisplayName("A8 같은 패키지 안 보조 객체끼리도 의존 금지")
+    void helpersInSamePackageDoNotDependOnEachOther() {
+
+        ArchCondition<JavaClass> independent = new ArchCondition<>("not depend on another class in the same package") {
+
+            /** 같은 패키지의 다른 최상위 클래스 의존 검사 */
+            @Override
+            public void check(
+                    JavaClass item,
+                    ConditionEvents events
+            ) {
+
+                for (Dependency dependency : item
+                        .getDirectDependenciesFromSelf()) {
+                    JavaClass target = dependency
+                            .getTargetClass();
+                    boolean samePackage = target
+                            .getPackageName()
+                            .equals(item
+                                    .getPackageName());
+                    boolean otherClass = !topLevel(target)
+                            .equals(topLevel(item));
+
+                    if (samePackage && otherClass) {
+                        events
+                                .add(SimpleConditionEvent
+                                        .violated(
+                                                item,
+                                                dependency
+                                                        .getDescription()
+                                        ));
+                    }
+                }
+            }
+        };
+
+        check(classes()
+                .that()
+                .resideInAnyPackage(HELPER_PACKAGES)
+                .should(independent));
+    }
+
+    @Test
     @DisplayName("A9 enum은 type 패키지에만 위치")
     void enumsLiveInTypePackage() {
 
@@ -272,6 +320,21 @@ class ArchitectureTests {
                 .areTopLevelClasses()
                 .should()
                 .beAssignableTo(Throwable.class));
+    }
+
+    // 중첩 클래스를 감싼 최상위 클래스 이름
+    private static String topLevel(JavaClass type) {
+
+        String name = type
+                .getName();
+        int nested = name
+                .indexOf('$');
+
+        return nested < 0 ? name : name
+                .substring(
+                        0,
+                        nested
+                );
     }
 
     // 대상 클래스가 아직 없는 계층도 통과시키는 규칙 검사
