@@ -6,6 +6,7 @@ import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 
+import io.github.kangwooju.doclens.core.pack.type.PackCapability;
 import io.github.kangwooju.doclens.mcp.global.response.type.Readiness;
 import io.github.kangwooju.doclens.mcp.global.response.type.UpdateStatus;
 import io.github.kangwooju.doclens.mcp.pack.dto.InstalledPack;
@@ -23,7 +24,8 @@ public class InstalledPackService {
 
     /** 제공하는 검색 방식 */
     public static final List<String> SERVED_CAPABILITIES = List
-            .of("BM25");
+            .of(PackCapability.BM25
+                    .name());
 
     private final InstalledPackStore installedPackStore;
 
