@@ -6,4 +6,6 @@ plugins {
 dependencies {
     implementation(libs.sqlite.jdbc)
     implementation("tools.jackson.core:jackson-databind")
+
+    testImplementation(libs.archunit.junit5)
 }
