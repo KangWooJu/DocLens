@@ -2,6 +2,7 @@ package io.github.kangwooju.doclens.pipeline.parse.helper;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.text.Normalizer;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -327,6 +328,9 @@ public class BlockExtractHelper {
 
             headings
                     .removeAll(excluded);
+            headings
+                    .removeIf(heading -> heading
+                            .hasClass("discrete"));
         }
 
         // 링크 해석 기준 URL, 해석할 수 없으면 null
@@ -535,6 +539,14 @@ public class BlockExtractHelper {
             int level = heading
                     .normalName()
                     .charAt(1) - '0';
+
+            if (sections
+                    .isEmpty() && level != 1) {
+                throw new DocumentHoldException(
+                        HoldReason.TITLE_MISSING,
+                        "first heading is not a level 1 title at " + domPath(heading)
+                );
+            }
             Set<Element> anchors = identitySet();
             anchors
                     .addAll(heading
@@ -765,6 +777,16 @@ public class BlockExtractHelper {
                 Sink sink
         ) {
 
+            if (sink
+                    .collectsAdmonition()) {
+                pendingOf(sink)
+                        .requestBreak();
+                pendingOf(sink)
+                        .appendChildren(element);
+
+                return;
+            }
+
             Element pre = element
                     .selectFirst("pre");
             String text = TextNormalizer
@@ -801,6 +823,16 @@ public class BlockExtractHelper {
                 return;
             }
 
+            if (sink
+                    .collectsAdmonition()) {
+                pendingOf(sink)
+                        .requestBreak();
+                pendingOf(sink)
+                        .appendChildren(title);
+
+                return;
+            }
+
             TextBuilder builder = new TextBuilder(identitySet())
                     .appendChildren(title);
 
@@ -827,6 +859,11 @@ public class BlockExtractHelper {
                 Element element,
                 Sink sink
         ) {
+
+            if (sink
+                    .collectsAdmonition()) {
+                flushAdmonition(sink);
+            }
 
             String type = element
                     .classNames()
@@ -1024,6 +1061,8 @@ public class BlockExtractHelper {
                 );
             }
 
+            requireTabChildren(element);
+
             List<Element> tabs = element
                     .select(profile
                             .tabSelectors()
@@ -1137,12 +1176,17 @@ public class BlockExtractHelper {
                                             )
                                     );
 
+            Element title = element
+                    .selectFirst("> div.title");
+
             emit(
                     sink,
                     BlockKind.TAB_GROUP,
                     null,
                     null,
-                    null,
+                    title == null ? null : new TextBuilder(identitySet())
+                            .appendChildren(title)
+                            .text(),
                     null,
                     new TabGroup(
                             locator,
@@ -1160,6 +1204,41 @@ public class BlockExtractHelper {
                     null,
                     element
             );
+        }
+
+        // 탭 그룹 안에는 제목, 탭 목록, 패널만 허용, 다른 내용은 버리지 않고 보류
+        private void requireTabChildren(Element group) {
+
+            for (Element child : group
+                    .children()) {
+                boolean known = child
+                        .hasClass("title") || child
+                                .hasClass("content");
+
+                if (!known) {
+                    throw new DocumentHoldException(
+                            HoldReason.TAB_STRUCTURE_UNSUPPORTED,
+                            "unexpected element in tab group at " + domPath(child)
+                    );
+                }
+
+                if (!child
+                        .hasClass("content")) {
+                    continue;
+                }
+
+                for (Element part : child
+                        .children()) {
+                    if (!part
+                            .hasClass("tablist") && !part
+                                    .hasClass("tabpanel")) {
+                        throw new DocumentHoldException(
+                                HoldReason.TAB_STRUCTURE_UNSUPPORTED,
+                                "unexpected element in tab group at " + domPath(part)
+                        );
+                    }
+                }
+            }
         }
 
         // 탭 id가 aria-labelledby에 든 패널 하나, 없거나 여럿이면 보류
@@ -1311,6 +1390,17 @@ public class BlockExtractHelper {
                 throw new DocumentHoldException(
                         HoldReason.TITLE_MISSING,
                         "content before the first heading at " + domPath
+                );
+            }
+
+            if (text != null && !Normalizer
+                    .isNormalized(
+                            text,
+                            Normalizer.Form.NFC
+                    )) {
+                throw new DocumentHoldException(
+                        HoldReason.INVALID_UNICODE,
+                        "combining character split across inline elements at " + domPath
                 );
             }
 
@@ -1471,6 +1561,19 @@ public class BlockExtractHelper {
                                                 .attr(attribute)
                                                 .trim())
                         );
+            } catch (NumberFormatException exception) {
+                return 1;
+            }
+        }
+
+        // ol start 속성, 없거나 잘못되면 1
+        private static int start(Element list) {
+
+            try {
+                return Integer
+                        .parseInt(list
+                                .attr("start")
+                                .trim());
             } catch (NumberFormatException exception) {
                 return 1;
             }
@@ -1879,10 +1982,7 @@ public class BlockExtractHelper {
                 boolean ordered = items
                         .normalName()
                         .equals("ol");
-                int number = ordered ? span(
-                        items,
-                        "start"
-                ) : 0;
+                int number = ordered ? start(items) : 0;
 
                 for (Element item : items
                         .children()) {
@@ -1937,7 +2037,7 @@ public class BlockExtractHelper {
             ) {
 
                 for (Element row : list
-                        .select("tr")) {
+                        .select("> table > tbody > tr")) {
                     Element term = row
                             .selectFirst("td.hdlist1");
                     Element description = row

@@ -16,9 +16,9 @@ public record SourceDocument(
         byte[] rawBytes
 ) {
 
-    /** 원본 바이트 방어 복사 */
+    /** 원본 바이트 방어 복사, null은 서비스가 입력 오류로 거절 */
     public SourceDocument {
-        rawBytes = rawBytes
+        rawBytes = rawBytes == null ? null : rawBytes
                 .clone();
     }
 }

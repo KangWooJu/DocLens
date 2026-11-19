@@ -4,6 +4,7 @@ import java.nio.charset.CharacterCodingException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.List;
 
@@ -49,6 +50,7 @@ public class DocumentParseService {
     /** 원본 하나의 구조 산출물, 보류는 DocumentHoldException, 입력 결함은 IllegalArgumentException */
     public StructuredDocument parse(SourceDocument source) {
 
+        requireFields(source);
         requireRawHash(source);
 
         String html = decode(source);
@@ -145,6 +147,43 @@ public class DocumentParseService {
                         profile
                 )
         );
+    }
+
+    // 필수 입력이 모두 있어야 통과, 빠지면 입력 오류
+    private static void requireFields(SourceDocument source) {
+
+        if (source == null) {
+            throw new IllegalArgumentException("source is required");
+        }
+
+        List<Object> required = Arrays
+                .asList(
+                        source
+                                .documentId(),
+                        source
+                                .project(),
+                        source
+                                .exactVersion(),
+                        source
+                                .documentType(),
+                        source
+                                .canonicalUrl(),
+                        source
+                                .originalUrl(),
+                        source
+                                .finalUrl(),
+                        source
+                                .sourceSnapshotId(),
+                        source
+                                .rawSha256(),
+                        source
+                                .rawBytes()
+                );
+
+        if (required
+                .contains(null)) {
+            throw new IllegalArgumentException("every source field is required");
+        }
     }
 
     // 원본 바이트의 SHA-256이 rawSha256과 같아야 통과
