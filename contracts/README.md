@@ -21,6 +21,22 @@ Language-neutral contracts shared by the Python collector and the Java modules. 
 - Changing the meaning of a field needs a new contract version, not an edit in place.
 - Every implementation of canonical JSON or ID hashing is tested against the golden vectors.
 
+## ID formulas
+
+`H(fields...)` is `sha256:` plus the lowercase hex SHA-256 of the fields, each NFC-normalized, UTF-8 encoded and prefixed with its 4-byte big-endian byte length. Numbers are decimal strings.
+
+| ID | Fields |
+|---|---|
+| documentId (Python) | `document-v1`, project, exactVersion, sourceType, documentType, canonicalUrl |
+| headingLocator | `heading-locator-v1`, `html-id`, NFC element id, occurrence; or `heading-locator-v1`, `ordinal`, path length, sibling ordinals |
+| tabGroupLocator | `tabgroup-locator-v1`, `html-id`, NFC element id, occurrence; or `tabgroup-locator-v1`, `ordinal`, `1`, group ordinal; `none` without tabs |
+| variantKey | the label itself for mapped `java`, `kotlin`, `groovy`, `maven`, `gradle`, `properties`, `yaml` at occurrence 0; otherwise the 64 hex digits of `variant-label-v1`, label, occurrence |
+| sectionId | `section-v1`, documentId, headingLocator |
+| blockId | `block-v1`, sectionId, block ordinal in the section |
+| chunk tab identity, 2+ groups | `tabgroup-set-v1`, count, locators in DOM order; the 64 hex digits of `variant-set-v1`, count, default variant keys. Internal only, never a tool variant value |
+| chunkId (Java) | `chunk-v1`, documentId, headingLocator, tabGroupLocator, variantKey, segmentIndex, content |
+| conceptId (Java) | `concept-v1`, project, artifact, exactVersion, targetKind, qualifiedName, signature |
+
 ## Check
 
 ```bash
