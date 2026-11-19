@@ -438,6 +438,111 @@ class ChunkServiceTests {
     }
 
     @Test
+    @DisplayName("본문 행 없는 큰 표는 통째 oversized, 반복하지 않는 큰 header는 첫 행과 따로")
+    void keepsLargeHeadersSeparate() {
+
+        String wide = "w"
+                .repeat(13000);
+        List<PackChunk> headerOnly = chunk(ParseFixtures
+                .page("<table class=\"tableblock\"><thead><tr><th>" + wide + "</th></tr></thead></table>"))
+                .sections()
+                .getFirst()
+                .chunks();
+
+        assertEquals(
+                1,
+                headerOnly
+                        .size()
+        );
+        assertEquals(
+                true,
+                blocks(headerOnly
+                        .getFirst())
+                        .getFirst()
+                        .get("oversized")
+        );
+
+        StringBuilder rows = new StringBuilder();
+
+        for (int index = 0; index < 3; index++) {
+            rows
+                    .append("<tr><td>")
+                    .append("r"
+                            .repeat(7500))
+                    .append("</td></tr>");
+        }
+
+        List<Map<String, Object>> parts = chunk(ParseFixtures
+                .page("<table class=\"tableblock\"><thead><tr><th>" + "h"
+                        .repeat(5000) + "</th></tr></thead><tbody>" + rows + "</tbody></table>"))
+                .sections()
+                .getFirst()
+                .chunks()
+                .stream()
+                .map(chunk -> blocks(chunk)
+                        .getFirst())
+                .toList();
+
+        assertEquals(
+                0,
+                parts
+                        .getFirst()
+                        .get("rowEndExclusive")
+        );
+        assertTrue(parts
+                .stream()
+                .noneMatch(part -> Boolean.TRUE
+                        .equals(part
+                                .get("oversized"))));
+    }
+
+    @Test
+    @DisplayName("큰 목록은 항목 줄로 나뉘고 조각을 줄바꿈으로 이으면 원래 목록")
+    void splitsLongListByLines() {
+
+        String sentence = "This sentence is long enough to fill the list item. ";
+        String body = "<div class=\"ulist\"><ul><li><p>a</p></li><li><p>" + sentence
+                .repeat(300) + "</p></li><li><p>c</p></li></ul></div>";
+        List<PackChunk> chunks = chunk(ParseFixtures
+                .page(body))
+                .sections()
+                .getFirst()
+                .chunks();
+        String list = ParseFixtures
+                .service()
+                .parse(ParseFixtures
+                        .source(ParseFixtures
+                                .page(body)))
+                .sections()
+                .getFirst()
+                .blocks()
+                .getFirst()
+                .text();
+
+        assertTrue(chunks
+                .size() > 1);
+        assertEquals(
+                list
+                        .replace(
+                                "\n",
+                                ""
+                        ),
+                chunks
+                        .stream()
+                        .map(PackChunk::content)
+                        .map(content -> content
+                                .replace(
+                                        "\n",
+                                        ""
+                                ))
+                        .reduce(
+                                "",
+                                String::concat
+                        )
+        );
+    }
+
+    @Test
     @DisplayName("한 청크의 탭 그룹이 둘이면 위치와 기본 key의 집합 digest")
     void digestsTwoTabGroups() {
 
