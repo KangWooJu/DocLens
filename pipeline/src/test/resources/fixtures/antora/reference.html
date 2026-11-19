@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sample Settings :: Sample Docs</title>
+<meta name="version" content="4.1.2">
+<meta name="component" content="boot">
+</head>
+<body class="article">
+<main class="article">
+<div class="content">
+<aside class="sidebar"><div class="toc"><div class="toc-menu"></div></div></aside>
+<article class="doc">
+<div class="breadcrumbs-container"><nav class="breadcrumbs"><ul><li><a href="index.html">Home</a></li></ul></nav></div>
+<div class="admonitionblock important latest"><table><tr><td class="icon"></td><td class="content">This page is for an old version.</td></tr></table></div>
+<h1 id="page-title" class="page">Sample Settings</h1>
+<div id="preamble">
+<div class="sectionbody">
+<div class="paragraph">
+<p>Settings are read from <code>application.properties</code> at   startup.
+See <a href="other.html#loading">loading rules</a> and <a href="mailto:team@example.invalid">mail</a>.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="settings.files"><a class="anchor" href="#settings.files"></a>Settings Files</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>The value <code>a &amp;lt; b</code> stays literal.</p>
+</div>
+<div class="listingblock">
+<div class="title">Example</div>
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-java hljs" data-lang="java"><span class="fold-block is-hidden-folded">import java.util.List;
+</span><span class="fold-block is-hidden-unfolded">// imports
+</span>class Sample {
+	String name = "x";  <i class="conum" data-value="1"></i><b>(1)</b>
+}
+</code></pre>
+</div>
+</div>
+<div class="colist arabic">
+<table>
+<tr><td><i class="conum" data-value="1"></i><b>1</b></td><td>The name field.</td></tr>
+</table>
+</div>
+<div class="admonitionblock note">
+<table>
+<tr>
+<td class="icon"><i class="fa icon-note" title="Note"></i></td>
+<td class="content">
+<div class="title">Remember</div>
+<div class="paragraph"><p>Run this first.</p></div>
+<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code class="language-bash hljs" data-lang="bash">./run.sh --check</code></pre></div></div>
+<div class="paragraph"><p>Then check the log.</p></div>
+</td>
+</tr>
+</table>
+</div>
+<div id="_tabs_1" class="openblock tabs is-sync is-loading">
+<div class="content">
+<div class="ulist tablist">
+<ul>
+<li id="_tabs_1_java" class="tab"><p>Java</p></li>
+<li id="_tabs_1_kotlin" class="tab"><p>Kotlin</p></li>
+</ul>
+</div>
+<div id="_tabs_1_java--panel" class="tabpanel" aria-labelledby="_tabs_1_java">
+<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code class="language-java hljs" data-lang="java">@SpringBootApplication
+public class MyApplication {
+}</code></pre></div></div>
+</div>
+<div id="_tabs_1_kotlin--panel" class="tabpanel" aria-labelledby="_tabs_1_kotlin" hidden>
+<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code class="language-kotlin hljs" data-lang="kotlin">@SpringBootApplication
+class MyApplication</code></pre></div></div>
+</div>
+</div>
+</div>
+<div class="sect2">
+<h3 id="settings.files.yaml"><a class="anchor" href="#settings.files.yaml"></a>YAML Files</h3>
+<div id="_tabs_2" class="openblock tabs is-sync is-loading">
+<div class="content">
+<div class="ulist tablist">
+<ul>
+<li id="_tabs_2_properties" class="tab"><p>Properties</p></li>
+<li id="_tabs_2_yaml" class="tab"><p>YAML</p></li>
+</ul>
+</div>
+<div id="_tabs_2_properties--panel" class="tabpanel" aria-labelledby="_tabs_2_properties">
+<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code class="language-properties hljs" data-lang="properties">spring.main.banner-mode=off</code></pre></div></div>
+</div>
+<div id="_tabs_2_yaml--panel" class="tabpanel" aria-labelledby="_tabs_2_yaml">
+<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code class="language-yaml hljs" data-lang="yaml">spring:
+  main:
+    banner-mode: "off"</code></pre></div></div>
+</div>
+</div>
+</div>
+<table class="tableblock frame-all grid-all stretch">
+<caption class="title">Table 1. Sample keys</caption>
+<colgroup><col style="width: 50%;"><col style="width: 50%;"></colgroup>
+<thead>
+<tr><th class="tableblock halign-left valign-top">Key</th><th class="tableblock halign-left valign-top">Default</th></tr>
+</thead>
+<tbody>
+<tr><td class="tableblock halign-left valign-top" rowspan="2"><p class="tableblock"><code>server.port</code></p></td><td class="tableblock halign-left valign-top"><p class="tableblock">8080</p></td></tr>
+<tr><td class="tableblock halign-left valign-top"><p class="tableblock">0 picks a free port</p></td></tr>
+</tbody>
+</table>
+</div>
+<div class="sect2">
+<h3><a class="anchor"></a>Untitled Anchor</h3>
+<div class="ulist">
+<ul>
+<li><p>First item</p>
+<div class="ulist">
+<ul>
+<li><p>Nested item</p></li>
+</ul>
+</div>
+</li>
+<li><p>Second <code>item</code></p></li>
+</ul>
+</div>
+<div class="olist arabic">
+<ol class="arabic" start="3">
+<li><p>Third step</p></li>
+<li><p>Fourth step</p></li>
+</ol>
+</div>
+<div class="dlist">
+<dl>
+<dt class="hdlist1">Term</dt>
+<dd><p>Its meaning.</p></dd>
+</dl>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="settings.files"><a class="anchor" href="#settings.files"></a>Settings Files Again</h2>
+<div class="sectionbody">
+<div class="paragraph"><p>Duplicate id section.</p></div>
+</div>
+</div>
+<nav class="pagination"><span class="next"><a href="next.html">Next</a></span></nav>
+</article>
+</div>
+</main>
+</body>
+</html>

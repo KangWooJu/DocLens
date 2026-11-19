@@ -2,8 +2,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
@@ -40,6 +42,9 @@ public class JavaCommentCheck {
 
     private static final Map<Pattern, String> WORDING_RULES = Map
             .of(
+                    Pattern
+                            .compile("<p>"),
+                    "<p> tag in comment",
                     Pattern
                             .compile("·"),
                     "middle dot, use a comma",
@@ -151,25 +156,30 @@ public class JavaCommentCheck {
             List<String> violations
     ) {
 
-        String[] lines = source
+        Map<Integer, String> lines = new TreeMap<>(commentLines(source));
+        String[] sourceLines = source
                 .split("\n");
-        int count = lines.length;
+        int count = sourceLines.length;
 
         for (int index = 0; index < count; index++) {
-            String line = lines[index]
+            String line = sourceLines[index]
                     .strip();
-            boolean comment = line
-                    .startsWith("//")
-                    || line
-                            .startsWith("/**")
-                    || line
-                            .startsWith("* ");
-            boolean displayName = line
-                    .startsWith("@DisplayName(");
 
-            if (!comment && !displayName) {
-                continue;
+            if (line
+                    .startsWith("@DisplayName(")) {
+                lines
+                        .put(
+                                index + 1,
+                                line
+                        );
             }
+        }
+
+        for (Map.Entry<Integer, String> entry : lines
+                .entrySet()) {
+            String line = entry
+                    .getValue()
+                    .strip();
 
             for (Map.Entry<Pattern, String> rule : WORDING_RULES
                     .entrySet()) {
@@ -178,14 +188,155 @@ public class JavaCommentCheck {
                         .matcher(line)
                         .find()) {
                     violations
-                            .add(path + ":" + (index + 1) + ": " + rule
-                                    .getValue());
+                            .add(path + ":" + entry
+                                    .getKey() + ": " + rule
+                                            .getValue());
                 }
             }
         }
     }
 
-    // 한 파일의 HTML 단락 태그와 메서드 주석 검사
+    // 문자열, 문자, 텍스트 블록을 건너뛰며 모은 줄별 주석 텍스트(구분 기호 포함)
+    private static Map<Integer, String> commentLines(String source) {
+
+        Map<Integer, StringBuilder> comments = new HashMap<>();
+        int length = source
+                .length();
+        int line = 1;
+        int index = 0;
+
+        while (index < length) {
+            char current = source
+                    .charAt(index);
+
+            if (current == '\n') {
+                line++;
+                index++;
+            } else if (source
+                    .startsWith(
+                            "//",
+                            index
+                    )) {
+                int end = source
+                        .indexOf(
+                                '\n',
+                                index
+                        );
+                end = end < 0 ? length : end;
+                comments
+                        .computeIfAbsent(
+                                line,
+                                key -> new StringBuilder()
+                        )
+                        .append(source
+                                .substring(
+                                        index,
+                                        end
+                                ));
+                index = end;
+            } else if (source
+                    .startsWith(
+                            "/*",
+                            index
+                    )) {
+                int end = source
+                        .indexOf(
+                                "*/",
+                                index + 2
+                        );
+                end = end < 0 ? length : end + 2;
+
+                for (String part : source
+                        .substring(
+                                index,
+                                end
+                        )
+                        .split(
+                                "\n",
+                                -1
+                        )) {
+                    comments
+                            .computeIfAbsent(
+                                    line,
+                                    key -> new StringBuilder()
+                            )
+                            .append(part);
+                    line++;
+                }
+
+                line--;
+                index = end;
+            } else if (source
+                    .startsWith(
+                            "\"\"\"",
+                            index
+                    )) {
+                int end = source
+                        .indexOf(
+                                "\"\"\"",
+                                index + 3
+                        );
+                end = end < 0 ? length : end + 3;
+                line += (int) source
+                        .substring(
+                                index,
+                                end
+                        )
+                        .chars()
+                        .filter(character -> character == '\n')
+                        .count();
+                index = end;
+            } else if (current == '"' || current == '\'') {
+                index = literalEnd(
+                        source,
+                        index,
+                        current
+                );
+            } else {
+                index++;
+            }
+        }
+
+        Map<Integer, String> result = new HashMap<>();
+        comments
+                .forEach((key, value) -> result
+                        .put(
+                                key,
+                                value
+                                        .toString()
+                        ));
+
+        return result;
+    }
+
+    // 문자열이나 문자 리터럴 끝 다음 위치, 이스케이프는 건너뜀
+    private static int literalEnd(
+            String source,
+            int start,
+            char quote
+    ) {
+
+        int index = start + 1;
+        int length = source
+                .length();
+
+        while (index < length) {
+            char current = source
+                    .charAt(index);
+
+            if (current == '\\') {
+                index += 2;
+            } else if (current == quote || current == '\n') {
+                return index + 1;
+            } else {
+                index++;
+            }
+        }
+
+        return length;
+    }
+
+    // 한 파일의 주석 문구와 메서드 주석 검사
     private static void check(
             CompilationUnitTree unit,
             SourcePositions positions,
@@ -199,12 +350,6 @@ public class JavaCommentCheck {
         String path = unit
                 .getSourceFile()
                 .getName();
-
-        if (source
-                .contains("<p>")) {
-            violations
-                    .add(path + ": <p> tag in comment");
-        }
 
         checkWording(
                 path,

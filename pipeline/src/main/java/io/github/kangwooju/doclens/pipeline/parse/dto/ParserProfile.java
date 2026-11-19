@@ -1,0 +1,48 @@
+package io.github.kangwooju.doclens.pipeline.parse.dto;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import io.github.kangwooju.doclens.core.pack.type.DocumentType;
+import io.github.kangwooju.doclens.core.pack.type.VariantGroupType;
+import io.github.kangwooju.doclens.pipeline.parse.type.ApprovalState;
+import io.github.kangwooju.doclens.pipeline.parse.type.DefaultTabRule;
+import io.github.kangwooju.doclens.pipeline.parse.type.VersionMarkerRule;
+
+/**
+ * 출처별 본문 선택 규칙, 사람이 실제 표본과 대조한 뒤 ENABLED
+ * urlPattern은 전체 일치 정규식, canonicalLabels는 탭 라벨 원문에서 정식 라벨로의 대응표
+ */
+public record ParserProfile(
+        String profileId,
+        String profileVersion,
+        String project,
+        DocumentType documentType,
+        String urlPattern,
+        String rootSelector,
+        List<String> excludedSelectors,
+        List<String> headingSelectors,
+        TabSelectors tabSelectors,
+        VersionMarkerRule versionMarkerRule,
+        List<String> fixtureHashes,
+        ApprovalState approvalState,
+        DefaultTabRule defaultTabRule,
+        Map<String, String> canonicalLabels,
+        Map<VariantGroupType, Set<String>> groupTypes
+) {
+
+    /** 목록과 대응표 불변 사본 */
+    public ParserProfile {
+        excludedSelectors = List
+                .copyOf(excludedSelectors);
+        headingSelectors = List
+                .copyOf(headingSelectors);
+        fixtureHashes = List
+                .copyOf(fixtureHashes);
+        canonicalLabels = Map
+                .copyOf(canonicalLabels);
+        groupTypes = Map
+                .copyOf(groupTypes);
+    }
+}
