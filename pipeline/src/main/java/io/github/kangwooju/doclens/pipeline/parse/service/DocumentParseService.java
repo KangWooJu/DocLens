@@ -41,7 +41,7 @@ import lombok.RequiredArgsConstructor;
 public class DocumentParseService {
 
     /** 파서 정책 버전, 규칙이 바뀌면 올림 */
-    public static final String PARSER_POLICY_VERSION = "parser-v2";
+    public static final String PARSER_POLICY_VERSION = "parser-v3";
 
     private final ParserProfileStore parserProfileStore;
     private final ParserProfilePolicy parserProfilePolicy;

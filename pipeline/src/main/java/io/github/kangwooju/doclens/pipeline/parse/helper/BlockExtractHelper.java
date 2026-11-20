@@ -2,11 +2,13 @@ package io.github.kangwooju.doclens.pipeline.parse.helper;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.charset.CharacterCodingException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
@@ -58,6 +60,8 @@ public class BlockExtractHelper {
 
     private static final int ZERO_WIDTH_SPACE = 0x200b;
 
+    private static final String CLOUDFLARE_EMAIL = "__cf_email__";
+
     private static final int NONE = 0;
 
     private static final int SPACE = 1;
@@ -87,6 +91,36 @@ public class BlockExtractHelper {
 
         return walk
                 .result();
+    }
+
+    // Cloudflare가 이메일처럼 보이는 글자를 숨긴 요소의 원래 텍스트, 해당 요소가 아니거나 값이 깨졌으면 null
+    private static String decodeCloudflareEmail(Element element) {
+
+        String hex = element
+                .attr("data-cfemail");
+
+        if (!element
+                .hasClass(CLOUDFLARE_EMAIL) || hex
+                        .length() < 2 || hex
+                                .length() % 2 != 0) {
+            return null;
+        }
+
+        try {
+            byte[] bytes = HexFormat
+                    .of()
+                    .parseHex(hex);
+            byte[] decoded = new byte[bytes.length - 1];
+
+            for (int index = 1; index < bytes.length; index++) {
+                decoded[index - 1] = (byte) (bytes[index] ^ bytes[0]);
+            }
+
+            return TextNormalizer
+                    .decodeUtf8(decoded);
+        } catch (IllegalArgumentException | CharacterCodingException exception) {
+            return null;
+        }
     }
 
     // 요소의 클래스 포함 여부
@@ -712,6 +746,16 @@ public class BlockExtractHelper {
             copy
                     .select("span.fold-block.is-hidden-unfolded")
                     .remove();
+
+            for (Element hidden : copy
+                    .getElementsByClass(CLOUDFLARE_EMAIL)) {
+                String decoded = decodeCloudflareEmail(hidden);
+
+                if (decoded != null) {
+                    hidden
+                            .replaceWith(new TextNode(decoded));
+                }
+            }
 
             for (Element conum : copy
                     .select("i.conum")) {
@@ -1380,6 +1424,8 @@ public class BlockExtractHelper {
                 flushAdmonition(sink);
             }
 
+            String blockAdmonitionType = admonitionType == null ? sink.admonitionType : admonitionType;
+
             if (current == null) {
                 issues
                         .add(new StructureIssue(
@@ -1406,7 +1452,7 @@ public class BlockExtractHelper {
                             text,
                             language,
                             title,
-                            admonitionType,
+                            blockAdmonitionType,
                             table,
                             tabGroup,
                             positions == null ? List
@@ -1716,6 +1762,14 @@ public class BlockExtractHelper {
                                 .contains(element) || SILENT_TAGS
                                         .contains(element
                                                 .normalName())) {
+                    return;
+                }
+
+                String decoded = decodeCloudflareEmail(element);
+
+                if (decoded != null) {
+                    appendText(decoded);
+
                     return;
                 }
 
