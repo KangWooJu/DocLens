@@ -56,6 +56,8 @@ public class BlockExtractHelper {
                     "template"
             );
 
+    private static final int ZERO_WIDTH_SPACE = 0x200b;
+
     private static final int NONE = 0;
 
     private static final int SPACE = 1;
@@ -1794,7 +1796,7 @@ public class BlockExtractHelper {
                         ));
             }
 
-            // 공백을 접으며 텍스트 추가
+            // 공백을 접으며 텍스트 추가, Asciidoctor가 말줄임표 뒤에 넣는 U+200B는 버림
             private void appendText(String raw) {
 
                 String normalized = TextNormalizer
@@ -1808,6 +1810,10 @@ public class BlockExtractHelper {
                             .codePointAt(index);
                     index += Character
                             .charCount(codePoint);
+
+                    if (codePoint == ZERO_WIDTH_SPACE) {
+                        continue;
+                    }
 
                     if (Character
                             .isWhitespace(codePoint) || codePoint == 0xa0) {
