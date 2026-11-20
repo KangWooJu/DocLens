@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.Arrays;
 import java.util.List;
 
 import org.junit.jupiter.api.DisplayName;
@@ -946,6 +947,71 @@ class DocumentParseServiceTests {
                                 "<div class=\"ulist tablist\">",
                                 "<div class=\"paragraph\"><p>stray</p></div><div class=\"ulist tablist\">"
                         )
+        );
+    }
+
+    @Test
+    @DisplayName("admonition에서 펼친 코드와 탭 그룹도 그 admonition 종류를 가짐")
+    void flattenedBlocksKeepAdmonitionType() {
+
+        List<Block> blocks = parse(ParseFixtures
+                .page("<div class=\"admonitionblock tip\"><table><tr><td class=\"icon\"></td><td class=\"content\">"
+                        + "<div class=\"paragraph\"><p>Use this.</p></div>"
+                        + "<div class=\"listingblock\"><div class=\"content\"><pre>run</pre></div></div>"
+                        + "</td></tr></table></div>"
+                        + "<div class=\"listingblock\"><div class=\"content\"><pre>after</pre></div></div>"))
+                .sections()
+                .getFirst()
+                .blocks();
+
+        assertEquals(
+                Arrays
+                        .asList(
+                                "tip",
+                                "tip",
+                                null
+                        ),
+                blocks
+                        .stream()
+                        .map(Block::admonitionType)
+                        .toList()
+        );
+    }
+
+    @Test
+    @DisplayName("Cloudflare가 이메일로 보고 숨긴 글자는 코드와 문단에서 원래 텍스트로 복원")
+    void restoresCloudflareHiddenText() {
+
+        String hidden = "<a href=\"/cdn-cgi/l/email-protection\" class=\"__cf_email__\" data-cfemail=\"%s\">[email&#160;protected]</a>";
+        List<Block> blocks = parse(ParseFixtures
+                .page("<div class=\"paragraph\"><p>Mail <code>" + hidden
+                        .formatted("423a023b6c38") + "</code> now</p></div>"
+                        + "<div class=\"listingblock\"><div class=\"content\"><pre>" + hidden
+                                .formatted("422b2c242d6c2332326c272c212d262b2c257f0232302d282721366c20372b2e266c312d37302127072c212d262b2c25")
+                        + "@</pre></div></div>"))
+                .sections()
+                .getFirst()
+                .blocks();
+
+        assertEquals(
+                "Mail x@y.z now",
+                blocks
+                        .getFirst()
+                        .text()
+        );
+        assertEquals(
+                "x@y.z",
+                blocks
+                        .getFirst()
+                        .inlineCodes()
+                        .getFirst()
+                        .text()
+        );
+        assertEquals(
+                "info.app.encoding=@project.build.sourceEncoding@",
+                blocks
+                        .get(1)
+                        .text()
         );
     }
 
