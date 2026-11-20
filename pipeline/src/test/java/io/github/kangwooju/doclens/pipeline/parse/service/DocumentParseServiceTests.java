@@ -950,6 +950,39 @@ class DocumentParseServiceTests {
     }
 
     @Test
+    @DisplayName("말줄임표 뒤 U+200B는 문단과 인라인 코드에서 버리고 코드 블록은 그대로")
+    void dropsZeroWidthSpaceFromInlineText() {
+
+        List<Block> blocks = parse(ParseFixtures
+                .page("<div class=\"paragraph\"><p>Call <code>run(&#8230;&#8203;)</code> now&#8230;&#8203;</p></div>"
+                        + "<div class=\"listingblock\"><div class=\"content\"><pre>a&#8203;b</pre></div></div>"))
+                .sections()
+                .getFirst()
+                .blocks();
+
+        assertEquals(
+                "Call run(\u2026) now\u2026",
+                blocks
+                        .getFirst()
+                        .text()
+        );
+        assertEquals(
+                "run(\u2026)",
+                blocks
+                        .getFirst()
+                        .inlineCodes()
+                        .getFirst()
+                        .text()
+        );
+        assertEquals(
+                "a\u200bb",
+                blocks
+                        .get(1)
+                        .text()
+        );
+    }
+
+    @Test
     @DisplayName("인라인 요소 경계에서 나뉜 결합 문자는 보류, 빠진 입력 값은 입력 오류")
     void rejectsSplitCombiningAndMissingFields() {
 
