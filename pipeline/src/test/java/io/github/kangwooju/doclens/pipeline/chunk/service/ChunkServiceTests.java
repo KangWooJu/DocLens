@@ -156,7 +156,7 @@ class ChunkServiceTests {
     }
 
     @Test
-    @DisplayName("식별자는 인라인 코드와 기본 변형 코드에서, 다른 문서 링크만 docLinks")
+    @DisplayName("식별자는 인라인 코드와 기본 변형 코드에서만, 다른 문서 링크만 docLinks")
     void extractsIdentifiersAndLinks() {
 
         PackChunk preamble = REFERENCE
@@ -203,11 +203,10 @@ class ChunkServiceTests {
                 .contains("a &lt; b"));
         assertTrue(yaml
                 .identifiers()
-                .containsAll(List
-                        .of(
-                                "spring.main.banner-mode",
-                                "server.port"
-                        )));
+                .contains("server.port"));
+        assertFalse(yaml
+                .identifiers()
+                .contains("spring.main.banner-mode"));
     }
 
     @Test

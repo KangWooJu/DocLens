@@ -13,6 +13,7 @@ import io.github.kangwooju.doclens.pipeline.parse.type.VersionMarkerRule;
 /**
  * 출처별 본문 선택 규칙, 사람이 실제 표본과 대조한 뒤 ENABLED
  * urlPattern은 전체 일치 정규식, canonicalLabels는 탭 라벨 원문에서 정식 라벨로의 대응표
+ * preferredDefaultLabels는 서버 표식이 없을 때 기본 탭으로 먼저 고를 정식 라벨 순서
  */
 public record ParserProfile(
         String profileId,
@@ -28,6 +29,7 @@ public record ParserProfile(
         List<String> fixtureHashes,
         ApprovalState approvalState,
         DefaultTabRule defaultTabRule,
+        List<String> preferredDefaultLabels,
         Map<String, String> canonicalLabels,
         Map<VariantGroupType, Set<String>> groupTypes
 ) {
@@ -40,6 +42,8 @@ public record ParserProfile(
                 .copyOf(headingSelectors);
         fixtureHashes = List
                 .copyOf(fixtureHashes);
+        preferredDefaultLabels = List
+                .copyOf(preferredDefaultLabels);
         canonicalLabels = Map
                 .copyOf(canonicalLabels);
         groupTypes = Map
