@@ -28,6 +28,7 @@ import io.github.kangwooju.doclens.pipeline.parse.dto.TableRow;
 import io.github.kangwooju.doclens.pipeline.parse.exception.DocumentHoldException;
 import io.github.kangwooju.doclens.pipeline.parse.store.ParserProfileStore;
 import io.github.kangwooju.doclens.pipeline.parse.type.BlockKind;
+import io.github.kangwooju.doclens.pipeline.parse.type.ApprovalState;
 import io.github.kangwooju.doclens.pipeline.parse.type.HoldReason;
 
 @DisplayName("원본 HTML의 구조 산출물 변환")
@@ -645,13 +646,40 @@ class DocumentParseServiceTests {
     }
 
     @Test
+    @DisplayName("기본 등록 Spring Boot Reference 프로필은 승인 상태라 보류 없이 파싱")
+    void defaultProfileIsEnabled() {
+
+        assertEquals(
+                ApprovalState.ENABLED,
+                ParserProfileStore.SPRING_BOOT_REFERENCE
+                        .approvalState()
+        );
+        assertEquals(
+                15,
+                ParserProfileStore.SPRING_BOOT_REFERENCE
+                        .fixtureHashes()
+                        .size()
+        );
+        assertFalse(ParseFixtures
+                .service(ParserProfileStore.SPRING_BOOT_REFERENCE)
+                .parse(ParseFixtures
+                        .source(REFERENCE))
+                .sections()
+                .isEmpty());
+    }
+
+    @Test
     @DisplayName("프로필 미승인, 프로필 없음은 선택자 미검증 보류")
     void holdsWithoutEnabledProfile() {
 
         DocumentHoldException candidate = assertThrows(
                 DocumentHoldException.class,
                 () -> ParseFixtures
-                        .service(ParserProfileStore.SPRING_BOOT_REFERENCE)
+                        .service(ParseFixtures
+                                .withApproval(
+                                        ParserProfileStore.SPRING_BOOT_REFERENCE,
+                                        ApprovalState.CANDIDATE
+                                ))
                         .parse(ParseFixtures
                                 .source(REFERENCE))
         );
