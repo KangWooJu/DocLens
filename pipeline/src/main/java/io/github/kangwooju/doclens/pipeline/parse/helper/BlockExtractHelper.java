@@ -2,7 +2,6 @@ package io.github.kangwooju.doclens.pipeline.parse.helper;
 
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.text.Normalizer;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -27,25 +26,23 @@ import io.github.kangwooju.doclens.pipeline.parse.dto.ExtractedDocument;
 import io.github.kangwooju.doclens.pipeline.parse.dto.InlineCode;
 import io.github.kangwooju.doclens.pipeline.parse.dto.ParserProfile;
 import io.github.kangwooju.doclens.pipeline.parse.dto.SourcePointer;
+import io.github.kangwooju.doclens.pipeline.parse.dto.StructureIssue;
 import io.github.kangwooju.doclens.pipeline.parse.dto.StructuredSection;
 import io.github.kangwooju.doclens.pipeline.parse.dto.TabGroup;
 import io.github.kangwooju.doclens.pipeline.parse.dto.TabVariant;
 import io.github.kangwooju.doclens.pipeline.parse.dto.TableCell;
 import io.github.kangwooju.doclens.pipeline.parse.dto.TableData;
 import io.github.kangwooju.doclens.pipeline.parse.dto.TableRow;
-import io.github.kangwooju.doclens.pipeline.parse.exception.DocumentHoldException;
 import io.github.kangwooju.doclens.pipeline.parse.type.BlockKind;
-import io.github.kangwooju.doclens.pipeline.parse.type.HoldReason;
+import io.github.kangwooju.doclens.pipeline.parse.type.StructureIssueType;
 
 /**
  * 본문 root를 DOM 순서로 순회해 섹션, 블록, 탭 그룹 생성
  * 제외 요소는 DOM을 고치지 않고 건너뜀, Asciidoctor HTML5 클래스로 블록 종류 판정
+ * 표현하지 못한 구조는 보류 판정 없이 건너뛰고 issues에 기록
  */
 @Component
 public class BlockExtractHelper {
-
-    /** 코드 블록과 탭 변형 하나의 최대 UTF-8 바이트 */
-    public static final int MAX_CODE_BYTES = 1024 * 1024;
 
     private static final String NESTED_BLOCKS = "div.listingblock, div.literalblock, div.admonitionblock, div.openblock.tabs, table.tableblock";
 
@@ -296,6 +293,7 @@ public class BlockExtractHelper {
         private final Map<String, Integer> headingIds = new HashMap<>();
         private final Map<String, Integer> tabIds = new HashMap<>();
         private final Map<String, Integer> siblings = new HashMap<>();
+        private final List<StructureIssue> issues = new ArrayList<>();
         private SectionDraft current;
         private int tabGroups;
 
@@ -343,39 +341,33 @@ public class BlockExtractHelper {
             }
         }
 
-        // 순회 결과, 섹션과 블록이 없으면 보류
+        // 순회 결과, 섹션이 없으면 title은 null
         ExtractedDocument result() {
-
-            if (sections
-                    .isEmpty()) {
-                throw new DocumentHoldException(
-                        HoldReason.TITLE_MISSING,
-                        "no heading in body"
-                );
-            }
-
-            int blockCount = sections
-                    .stream()
-                    .mapToInt(section -> section.blocks
-                            .size())
-                    .sum();
-
-            if (blockCount == 0) {
-                throw new DocumentHoldException(
-                        HoldReason.BODY_EMPTY,
-                        "no block in body"
-                );
-            }
 
             return new ExtractedDocument(
                     sections
-                            .getFirst().headingPath
-                            .getLast(),
+                            .isEmpty() ? null : sections
+                                    .getFirst().headingPath
+                                    .getLast(),
                     sections
                             .stream()
                             .map(SectionDraft::toSection)
-                            .toList()
+                            .toList(),
+                    issues
             );
+        }
+
+        // 표현하지 못한 요소의 종류와 위치 기록
+        private void issue(
+                StructureIssueType type,
+                Element element
+        ) {
+
+            issues
+                    .add(new StructureIssue(
+                            type,
+                            domPath(element)
+                    ));
         }
 
         // 컨테이너 자식 순회, 블록 사이의 연속 인라인 노드는 문단 하나
@@ -539,14 +531,6 @@ public class BlockExtractHelper {
             int level = heading
                     .normalName()
                     .charAt(1) - '0';
-
-            if (sections
-                    .isEmpty() && level != 1) {
-                throw new DocumentHoldException(
-                        HoldReason.TITLE_MISSING,
-                        "first heading is not a level 1 title at " + domPath(heading)
-                );
-            }
             Set<Element> anchors = identitySet();
             anchors
                     .addAll(heading
@@ -746,10 +730,6 @@ public class BlockExtractHelper {
             String text = TextNormalizer
                     .normalize(copy
                             .wholeText());
-            requireCodeSize(
-                    text,
-                    element
-            );
             Element language = pre
                     .selectFirst("code[data-lang]");
             Element title = element
@@ -945,9 +925,9 @@ public class BlockExtractHelper {
                     if (!cell
                             .select(NESTED_BLOCKS)
                             .isEmpty()) {
-                        throw new DocumentHoldException(
-                                HoldReason.BLOCK_NESTING_UNSUPPORTED,
-                                "block inside table cell at " + domPath(cell)
+                        issue(
+                                StructureIssueType.BLOCK_IN_TABLE_CELL,
+                                cell
                         );
                     }
 
@@ -1011,9 +991,9 @@ public class BlockExtractHelper {
             if (!element
                     .select(NESTED_BLOCKS)
                     .isEmpty()) {
-                throw new DocumentHoldException(
-                        HoldReason.BLOCK_NESTING_UNSUPPORTED,
-                        "block inside list at " + domPath(element)
+                issue(
+                        StructureIssueType.BLOCK_IN_LIST,
+                        element
                 );
             }
 
@@ -1043,7 +1023,7 @@ public class BlockExtractHelper {
             }
         }
 
-        // 탭 그룹과 모든 변형, 기본 변형은 서비스가 정책으로 결정
+        // 탭 그룹과 모든 변형, 기본 변형은 서비스가 정책으로 결정, 표현하지 못한 그룹은 건너뜀
         private void tabs(
                 Element element,
                 Sink sink
@@ -1055,13 +1035,17 @@ public class BlockExtractHelper {
                     .anyMatch(group -> group != element && isTabGroup(group));
 
             if (sink.panel || nested) {
-                throw new DocumentHoldException(
-                        HoldReason.TAB_STRUCTURE_UNSUPPORTED,
-                        "nested tab group at " + domPath(element)
+                issue(
+                        StructureIssueType.NESTED_TAB_GROUP,
+                        element
                 );
+
+                return;
             }
 
-            requireTabChildren(element);
+            if (!hasOnlyTabChildren(element)) {
+                return;
+            }
 
             List<Element> tabs = element
                     .select(profile
@@ -1072,10 +1056,12 @@ public class BlockExtractHelper {
 
             if (tabs
                     .isEmpty()) {
-                throw new DocumentHoldException(
-                        HoldReason.TAB_STRUCTURE_UNSUPPORTED,
-                        "tab group without tabs at " + domPath(element)
+                issue(
+                        StructureIssueType.TAB_GROUP_WITHOUT_TABS,
+                        element
                 );
+
+                return;
             }
 
             Set<Element> usedPanels = identitySet();
@@ -1094,6 +1080,16 @@ public class BlockExtractHelper {
                         tab,
                         panels
                 );
+
+                if (panel == null) {
+                    issue(
+                            StructureIssueType.TAB_PANEL_MISMATCH,
+                            tab
+                    );
+
+                    return;
+                }
+
                 usedPanels
                         .add(panel);
                 String label = new TextBuilder(identitySet())
@@ -1112,10 +1108,6 @@ public class BlockExtractHelper {
                         panel,
                         Sink
                                 .panel(blocks)
-                );
-                requireVariantSize(
-                        blocks,
-                        panel
                 );
 
                 if (tab
@@ -1156,10 +1148,12 @@ public class BlockExtractHelper {
             if (usedPanels
                     .size() != panels
                             .size()) {
-                throw new DocumentHoldException(
-                        HoldReason.TAB_STRUCTURE_UNSUPPORTED,
-                        "panel without tab at " + domPath(element)
+                issue(
+                        StructureIssueType.TAB_PANEL_MISMATCH,
+                        element
                 );
+
+                return;
             }
 
             String elementId = element
@@ -1206,8 +1200,8 @@ public class BlockExtractHelper {
             );
         }
 
-        // 탭 그룹 안에는 제목, 탭 목록, 패널만 허용, 다른 내용은 버리지 않고 보류
-        private void requireTabChildren(Element group) {
+        // 탭 그룹 자식이 제목, 탭 목록, 패널뿐인지 여부, 다른 요소는 위치 기록
+        private boolean hasOnlyTabChildren(Element group) {
 
             for (Element child : group
                     .children()) {
@@ -1216,10 +1210,12 @@ public class BlockExtractHelper {
                                 .hasClass("content");
 
                 if (!known) {
-                    throw new DocumentHoldException(
-                            HoldReason.TAB_STRUCTURE_UNSUPPORTED,
-                            "unexpected element in tab group at " + domPath(child)
+                    issue(
+                            StructureIssueType.TAB_GROUP_UNKNOWN_CHILD,
+                            child
                     );
+
+                    return false;
                 }
 
                 if (!child
@@ -1232,16 +1228,20 @@ public class BlockExtractHelper {
                     if (!part
                             .hasClass("tablist") && !part
                                     .hasClass("tabpanel")) {
-                        throw new DocumentHoldException(
-                                HoldReason.TAB_STRUCTURE_UNSUPPORTED,
-                                "unexpected element in tab group at " + domPath(part)
+                        issue(
+                                StructureIssueType.TAB_GROUP_UNKNOWN_CHILD,
+                                part
                         );
+
+                        return false;
                     }
                 }
             }
+
+            return true;
         }
 
-        // 탭 id가 aria-labelledby에 든 패널 하나, 없거나 여럿이면 보류
+        // 탭 id가 aria-labelledby에 든 패널 하나, 없거나 여럿이면 null
         private Element panelOf(
                 Element tab,
                 List<Element> panels
@@ -1260,17 +1260,9 @@ public class BlockExtractHelper {
                                     .contains(tabId))
                     .toList();
 
-            if (matches
-                    .size() != 1) {
-                throw new DocumentHoldException(
-                        HoldReason.TAB_STRUCTURE_UNSUPPORTED,
-                        matches
-                                .size() + " panels for tab " + tabId
-                );
-            }
-
             return matches
-                    .getFirst();
+                    .size() == 1 ? matches
+                            .getFirst() : null;
         }
 
         // 라벨이 모두 대응표를 거쳐 한 유형 집합에 들면 그 유형, 아니면 other
@@ -1387,21 +1379,13 @@ public class BlockExtractHelper {
             }
 
             if (current == null) {
-                throw new DocumentHoldException(
-                        HoldReason.TITLE_MISSING,
-                        "content before the first heading at " + domPath
-                );
-            }
+                issues
+                        .add(new StructureIssue(
+                                StructureIssueType.CONTENT_BEFORE_HEADING,
+                                domPath
+                        ));
 
-            if (text != null && !Normalizer
-                    .isNormalized(
-                            text,
-                            Normalizer.Form.NFC
-                    )) {
-                throw new DocumentHoldException(
-                        HoldReason.INVALID_UNICODE,
-                        "combining character split across inline elements at " + domPath
-                );
+                return;
             }
 
             List<Block> target = sink.blocks == null ? current.blocks : sink.blocks;
@@ -1450,60 +1434,6 @@ public class BlockExtractHelper {
                     current == null ? null : current.headingLocator,
                     ordinal
             );
-        }
-
-        // 코드가 1 MiB를 넘으면 보류
-        private void requireCodeSize(
-                String code,
-                Element element
-        ) {
-
-            if (TextNormalizer
-                    .utf8Length(code) > MAX_CODE_BYTES) {
-                throw new DocumentHoldException(
-                        HoldReason.CODE_OVER_HARD_LIMIT,
-                        "code over 1 MiB at " + domPath(element)
-                );
-            }
-        }
-
-        // 탭 변형 내용 합이 1 MiB를 넘으면 보류
-        private void requireVariantSize(
-                List<Block> blocks,
-                Element panel
-        ) {
-
-            long bytes = 0;
-
-            for (Block block : blocks) {
-                if (block
-                        .text() != null) {
-                    bytes += TextNormalizer
-                            .utf8Length(block
-                                    .text());
-                }
-
-                if (block
-                        .table() != null) {
-                    for (TableRow row : block
-                            .table()
-                            .rows()) {
-                        for (TableCell cell : row
-                                .cells()) {
-                            bytes += TextNormalizer
-                                    .utf8Length(cell
-                                            .text());
-                        }
-                    }
-                }
-            }
-
-            if (bytes > MAX_CODE_BYTES) {
-                throw new DocumentHoldException(
-                        HoldReason.CODE_OVER_HARD_LIMIT,
-                        "tab variant over 1 MiB at " + domPath(panel)
-                );
-            }
         }
 
         // 본문 root부터 요소 자식 순번을 / 로 이은 경로

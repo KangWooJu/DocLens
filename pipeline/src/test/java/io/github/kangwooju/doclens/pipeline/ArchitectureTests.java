@@ -287,6 +287,18 @@ class ArchitectureTests {
     }
 
     @Test
+    @DisplayName("Helper는 판정하지 않으므로 예외 패키지 의존 금지")
+    void helpersDoNotThrowDomainExceptions() {
+
+        check(noClasses()
+                .that()
+                .resideInAPackage("..helper..")
+                .should()
+                .dependOnClassesThat()
+                .resideInAPackage("..exception.."));
+    }
+
+    @Test
     @DisplayName("A9 enum은 type 패키지에만 위치")
     void enumsLiveInTypePackage() {
 

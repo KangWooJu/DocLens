@@ -97,6 +97,8 @@ public final class ParseFixtures {
                 profile
                         .defaultTabRule(),
                 profile
+                        .preferredDefaultLabels(),
+                profile
                         .canonicalLabels(),
                 profile
                         .groupTypes()

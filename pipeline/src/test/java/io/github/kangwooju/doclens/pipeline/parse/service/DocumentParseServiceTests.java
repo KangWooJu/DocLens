@@ -299,7 +299,7 @@ class DocumentParseServiceTests {
     }
 
     @Test
-    @DisplayName("탭은 모든 변형 보존, 표식이 없으면 프로필 규칙으로 첫 탭이 기본")
+    @DisplayName("탭은 모든 변형 보존, 표식이 없으면 프로필 선호 라벨, 그다음 첫 탭이 기본")
     void keepsEveryTabVariant() {
 
         TabGroup java = section(1)
@@ -363,9 +363,14 @@ class DocumentParseServiceTests {
                         .groupType()
         );
         assertEquals(
-                "properties",
+                "yaml",
                 config
                         .defaultVariant()
+        );
+        assertEquals(
+                "PROFILE_RULE:PREFERRED_LABEL:yaml",
+                config
+                        .defaultEvidence()
         );
     }
 

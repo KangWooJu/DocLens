@@ -34,7 +34,7 @@ import lombok.RequiredArgsConstructor;
 
 /**
  * 원본 HTML 하나를 구조 산출물로 만드는 PARSE 단계
- * 원본 hash, UTF-8, 프로필, 버전 표식, 본문 root 확인 뒤 순회, 맞지 않으면 보류
+ * 원본 hash, UTF-8, 프로필, 버전 표식, 본문 root 확인 뒤 순회, 순회 결과도 정책으로 확인, 맞지 않으면 보류
  */
 @Service
 @RequiredArgsConstructor
@@ -111,6 +111,9 @@ public class DocumentParseService {
                         source
                                 .finalUrl()
                 );
+
+        parserProfilePolicy
+                .requireSupported(extracted);
 
         return new StructuredDocument(
                 StructuredDocument.SCHEMA_VERSION,
@@ -281,9 +284,6 @@ public class DocumentParseService {
                     .resolveDefault(
                             profile,
                             group
-                                    .markedOrdinals(),
-                            group
-                                    .groupLocator()
                     );
 
             resolved
