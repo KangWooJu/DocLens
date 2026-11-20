@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 import org.springframework.stereotype.Component;
 
@@ -17,7 +18,7 @@ import io.github.kangwooju.doclens.pipeline.parse.dto.TabGroup;
 import io.github.kangwooju.doclens.pipeline.parse.type.BlockKind;
 
 /**
- * 정확 일치 검색용 식별자, 원문 대소문자 그대로, 비기본 탭 변형 제외
+ * 정확 일치 검색용 식별자, 원문 대소문자 그대로, 탭 그룹은 기본이 아닌 변형도 포함
  * 인라인 코드 전체와 코드 안 annotation, 점 표기 이름, CamelCase 타입
  */
 @Component
@@ -50,8 +51,7 @@ public class IdentifierHelper {
             ChunkPiece piece = member
                     .piece();
 
-            for (InlineCode code : piece
-                    .inlineCodes()) {
+            for (InlineCode code : inlineCodes(piece)) {
                 if (isIdentifier(code
                         .text())) {
                     identifiers
@@ -74,7 +74,38 @@ public class IdentifierHelper {
                 .copyOf(identifiers);
     }
 
-    // 정규식 대상 코드, CODE 블록과 탭 그룹의 기본 변형 CODE
+    // 렌더링 텍스트의 인라인 코드와 탭 그룹 모든 변형 블록의 인라인 코드
+    private static List<InlineCode> inlineCodes(ChunkPiece piece) {
+
+        TabGroup group = piece
+                .rendered()
+                .block()
+                .tabGroup();
+
+        if (group == null) {
+            return piece
+                    .inlineCodes();
+        }
+
+        return Stream
+                .concat(
+                        piece
+                                .inlineCodes()
+                                .stream(),
+                        group
+                                .variants()
+                                .stream()
+                                .flatMap(variant -> variant
+                                        .blocks()
+                                        .stream())
+                                .flatMap(inner -> inner
+                                        .inlineCodes()
+                                        .stream())
+                )
+                .toList();
+    }
+
+    // 정규식 대상 코드, CODE 블록과 탭 그룹 모든 변형의 CODE
     private static List<String> codeTexts(Block block) {
 
         if (block
@@ -90,16 +121,10 @@ public class IdentifierHelper {
                     .of();
         }
 
-        TabGroup group = block
-                .tabGroup();
-
-        return group
+        return block
+                .tabGroup()
                 .variants()
                 .stream()
-                .filter(variant -> variant
-                        .variantKey()
-                        .equals(group
-                                .defaultVariant()))
                 .flatMap(variant -> variant
                         .blocks()
                         .stream())
