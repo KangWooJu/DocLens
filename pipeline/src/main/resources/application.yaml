@@ -22,3 +22,8 @@ management:
     web:
       exposure:
         include: health
+
+doclens:
+  pipeline:
+    # Local object root: raw/ sources and packs/ output (an S3 bucket from step E on)
+    object-root: ${DOCLENS_OBJECT_ROOT:./data}
