@@ -21,12 +21,15 @@ import io.github.kangwooju.doclens.pipeline.pack.dto.BuildResult;
 import io.github.kangwooju.doclens.pipeline.pack.dto.BuildRow;
 import io.github.kangwooju.doclens.pipeline.pack.dto.BuildState;
 import io.github.kangwooju.doclens.pipeline.pack.dto.DocumentHashes;
+import io.github.kangwooju.doclens.pipeline.pack.dto.ExportTarget;
 import io.github.kangwooju.doclens.pipeline.pack.dto.NewBuild;
+import io.github.kangwooju.doclens.pipeline.pack.dto.PackRecord;
 import io.github.kangwooju.doclens.pipeline.pack.dto.ProcessingConfig;
 import io.github.kangwooju.doclens.pipeline.pack.dto.SourceEntry;
 import io.github.kangwooju.doclens.pipeline.pack.dto.SourceRead;
 import io.github.kangwooju.doclens.pipeline.pack.dto.StageDigest;
 import io.github.kangwooju.doclens.pipeline.pack.exception.BuildInputConflictException;
+import io.github.kangwooju.doclens.pipeline.pack.exception.BuildNotExportableException;
 import io.github.kangwooju.doclens.pipeline.pack.exception.StageNondeterminismException;
 import io.github.kangwooju.doclens.pipeline.pack.helper.BuildDigestHelper;
 import io.github.kangwooju.doclens.pipeline.pack.policy.BuildRequestPolicy;
@@ -345,6 +348,57 @@ public class BuildService {
                         buildId,
                         reason
                 );
+    }
+
+    /** Export 대상과 Pack 메타 원본 목록, CHUNK 영수증, 없는 Build면 BuildNotExportableException */
+    public ExportTarget exportTarget(UUID buildId) {
+
+        BuildRow build = buildRepository
+                .findById(buildId)
+                .orElseThrow(() -> new BuildNotExportableException(
+                        buildId
+                                .toString(),
+                        "no such build"
+                ));
+
+        return new ExportTarget(
+                build,
+                buildRepository
+                        .sourceSnapshotIds(buildId),
+                buildRepository
+                        .receipt(
+                                buildId,
+                                "CHUNK"
+                        )
+                        .orElse(null)
+        );
+    }
+
+    /** SEALED Build를 게시한 Pack과 함께 SUCCEEDED로, 바뀌면 같은 범위에서 EXPORT 영수증 */
+    public void markSucceeded(
+            UUID buildId,
+            PackRecord pack,
+            int documentCount
+    ) {
+
+        if (buildRepository
+                .markSucceeded(
+                        buildId,
+                        pack
+                )) {
+            buildRepository
+                    .insertReceipt(
+                            buildId,
+                            "EXPORT",
+                            new StageDigest(
+                                    pack
+                                            .logicalContentSha256(),
+                                    documentCount,
+                                    pack
+                                            .sizeBytes()
+                            )
+                    );
+        }
     }
 
     /** 호출자에게 돌려줄 현재 Build 상태 */
