@@ -207,10 +207,12 @@ class ArchitectureTests {
     }
 
     @Test
-    @DisplayName("A7 TransactionTemplate, PlatformTransactionManager 직접 사용 금지")
+    @DisplayName("A7 TransactionTemplate, PlatformTransactionManager 직접 사용 금지, global의 TransactionExecutor만 예외")
     void noDirectTransactionApis() {
 
         check(noClasses()
+                .that()
+                .resideOutsideOfPackage("..global.transaction..")
                 .should()
                 .dependOnClassesThat()
                 .haveFullyQualifiedName("org.springframework.transaction.support.TransactionTemplate")
