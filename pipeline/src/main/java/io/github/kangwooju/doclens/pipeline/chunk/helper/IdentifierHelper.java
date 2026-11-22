@@ -27,7 +27,8 @@ public class IdentifierHelper {
     /** 식별자 최대 길이(code point) */
     public static final int MAX_LENGTH = 256;
 
-    private static final List<Pattern> CODE_PATTERNS = List
+    /** 코드 안 annotation, 점 표기 이름, CamelCase 타입 정규식, 처리 설정 hash 입력 */
+    public static final List<Pattern> CODE_PATTERNS = List
             .of(
                     Pattern
                             .compile("(?<![\\w.@{])@[A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)*"),

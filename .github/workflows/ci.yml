@@ -30,6 +30,19 @@ jobs:
       - name: Java comment rules
         run: java tools/JavaCommentCheck.java
 
+      # Golden outputs per processing configuration: lines may be added, never changed or removed.
+      - name: Golden outputs are append-only
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags --depth=1 origin "$GITHUB_BASE_REF"
+          file=pipeline/src/test/resources/golden/processing-outputs.jsonl
+          if git cat-file -e "FETCH_HEAD:$file" 2>/dev/null; then
+            if git diff FETCH_HEAD -- "$file" | grep -E '^-[^-]'; then
+              echo "::error file=$file::existing golden lines must not change or be removed; bump a policy version and add a new line instead"
+              exit 1
+            fi
+          fi
+
       - run: ./gradlew build --console=plain
 
   collector:

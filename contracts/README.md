@@ -37,6 +37,18 @@ Language-neutral contracts shared by the Python collector and the Java modules. 
 | chunkId (Java) | `chunk-v1`, documentId, headingLocator, tabGroupLocator, variantKey, segmentIndex, content |
 | conceptId (Java) | `concept-v1`, project, artifact, exactVersion, targetKind, qualifiedName, signature |
 
+## processingConfigHash
+
+`processingConfigHash` = `sha256:` + hex SHA-256 of the canonical JSON (same rules as `requestHash`) of a `processing-config-v1` preimage. The pipeline builds it from the values that change its output:
+
+- parser: policy version, jsoup version, code size limit, every registered parser profile except `fixtureHashes` (approval evidence)
+- chunker: policy version (includes the JDK major), target/max bytes, max blocks, overlap, header repeat limit, separator
+- identifiers: code patterns, maximum length
+- artifacts: structured document schema version
+- pack: `sourceAttribution`, `createdBy`
+
+Enums are written by name, sets as code-point-sorted arrays. Paths, timestamps and the hash itself are excluded. Behaviour coded in Java (selectors, renderers, ID formulas) is identified by the policy versions: `pipeline/src/test/resources/golden/processing-outputs.jsonl` pins the fixture outputs per hash, and CI rejects a pull request that changes or removes a line. A request whose hash differs from the applied configuration is rejected before any Build row is written.
+
 ## Check
 
 ```bash

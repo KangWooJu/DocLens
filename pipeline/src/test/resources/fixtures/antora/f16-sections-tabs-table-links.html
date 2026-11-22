@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Export Sample :: Sample Docs</title>
+<meta name="version" content="4.1.2">
+<meta name="component" content="boot">
+</head>
+<body class="article">
+<main class="article">
+<div class="content">
+<article class="doc">
+<div class="breadcrumbs-container"><nav class="breadcrumbs"><ul><li><a href="index.html">Home</a></li></ul></nav></div>
+<h1 id="page-title" class="page">Export Sample</h1>
+<div id="preamble">
+<div class="sectionbody">
+<div class="paragraph">
+<p>This page jumps to <a href="#export.tables">the table section</a> and links to <a href="other.html#loading">loading rules</a>.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="export.code"><a class="anchor" href="#export.code"></a>Code Variants</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Declare the application class in either language.</p>
+</div>
+<div id="_tabs_1" class="openblock tabs is-sync is-loading">
+<div class="content">
+<div class="ulist tablist">
+<ul>
+<li id="_tabs_1_java" class="tab"><p>Java</p></li>
+<li id="_tabs_1_kotlin" class="tab"><p>Kotlin</p></li>
+</ul>
+</div>
+<div id="_tabs_1_java--panel" class="tabpanel" aria-labelledby="_tabs_1_java">
+<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code class="language-java hljs" data-lang="java">@SpringBootApplication
+public class ExportApplication {
+}</code></pre></div></div>
+</div>
+<div id="_tabs_1_kotlin--panel" class="tabpanel" aria-labelledby="_tabs_1_kotlin" hidden>
+<div class="listingblock"><div class="content"><pre class="highlightjs highlight"><code class="language-kotlin hljs" data-lang="kotlin">@SpringBootApplication
+class ExportApplication</code></pre></div></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="export.tables"><a class="anchor" href="#export.tables"></a>Merged Tables</h2>
+<div class="sectionbody">
+<table class="tableblock frame-all grid-all stretch">
+<caption class="title">Table 1. Export keys</caption>
+<colgroup><col style="width: 34%;"><col style="width: 33%;"><col style="width: 33%;"></colgroup>
+<thead>
+<tr><th class="tableblock halign-left valign-top">Key</th><th class="tableblock halign-left valign-top" colspan="2">Values</th></tr>
+</thead>
+<tbody>
+<tr><td class="tableblock halign-left valign-top" rowspan="2"><p class="tableblock"><code>export.mode</code></p></td><td class="tableblock halign-left valign-top"><p class="tableblock">full</p></td><td class="tableblock halign-left valign-top"><p class="tableblock">default</p></td></tr>
+<tr><td class="tableblock halign-left valign-top"><p class="tableblock">delta</p></td><td class="tableblock halign-left valign-top"><p class="tableblock">opt-in</p></td></tr>
+<tr><td class="tableblock halign-left valign-top"><p class="tableblock"><code>export.path</code></p></td><td class="tableblock halign-left valign-top" colspan="2"><p class="tableblock">See <a href="#export.code">code variants</a>.</p></td></tr>
+</tbody>
+</table>
+</div>
+</div>
+</article>
+</div>
+</main>
+</body>
+</html>

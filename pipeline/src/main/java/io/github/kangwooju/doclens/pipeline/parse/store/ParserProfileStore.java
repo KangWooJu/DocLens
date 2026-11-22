@@ -133,6 +133,12 @@ public class ParserProfileStore {
                 .copyOf(profiles);
     }
 
+    /** 등록한 프로필 전체, 등록 순서 그대로 */
+    public List<ParserProfile> profiles() {
+
+        return profiles;
+    }
+
     /** project, 문서 유형, 최종 URL이 모두 맞는 첫 프로필, 승인 상태는 보지 않음 */
     public Optional<ParserProfile> find(
             String project,
