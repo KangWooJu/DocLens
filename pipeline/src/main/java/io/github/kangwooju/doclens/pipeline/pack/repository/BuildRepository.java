@@ -5,6 +5,7 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -19,6 +20,7 @@ import io.github.kangwooju.doclens.pipeline.pack.dto.NewBuild;
 import io.github.kangwooju.doclens.pipeline.pack.dto.PackRecord;
 import io.github.kangwooju.doclens.pipeline.pack.dto.SourceEntry;
 import io.github.kangwooju.doclens.pipeline.pack.dto.StageDigest;
+import io.github.kangwooju.doclens.pipeline.pack.dto.StoredArtifact;
 import io.github.kangwooju.doclens.pipeline.pack.type.ArtifactOutcome;
 import io.github.kangwooju.doclens.pipeline.pack.type.BuildStatus;
 import io.github.kangwooju.doclens.pipeline.parse.type.HoldReason;
@@ -35,6 +37,9 @@ public class BuildRepository {
             source_digest, document_count, status, failure_reason,
             pack_object_key, pack_checksum, pack_size_bytes, pack_logical_sha256
             """;
+
+    // Export cursor가 한 번에 가져오는 문서 수
+    private static final int EXPORT_FETCH_SIZE = 16;
 
     private final JdbcClient jdbcClient;
 
@@ -398,6 +403,84 @@ public class BuildRepository {
                 .sql("UPDATE pipeline.builds SET status = 'FAILED', failure_reason = ? WHERE build_id = ? AND status = 'RUNNING'")
                 .params(
                         reason,
+                        buildId
+                )
+                .update() == 1;
+    }
+
+    /** Pack 메타의 원본 snapshot 목록, 열이 COLLATE "C"라 code point 순 */
+    public List<String> sourceSnapshotIds(UUID buildId) {
+
+        return jdbcClient
+                .sql("SELECT DISTINCT source_snapshot_id FROM pipeline.build_sources WHERE build_id = ? ORDER BY source_snapshot_id")
+                .param(buildId)
+                .query(String.class)
+                .list();
+    }
+
+    /** 단계 영수증, 없으면 빈 값 */
+    public Optional<StageDigest> receipt(
+            UUID buildId,
+            String stage
+    ) {
+
+        return jdbcClient
+                .sql("SELECT output_digest, item_count, byte_count FROM pipeline.verified_stage_results WHERE build_id = ? AND stage = ?")
+                .params(
+                        buildId,
+                        stage
+                )
+                .query((rs, row) -> new StageDigest(
+                        rs
+                                .getString("output_digest"),
+                        rs
+                                .getInt("item_count"),
+                        rs
+                                .getLong("byte_count")
+                ))
+                .optional();
+    }
+
+    /** DONE 산출물을 documentId 순 cursor로 하나씩 넘김, 호출자의 트랜잭션 안에서만 흘려 읽음 */
+    public void streamArtifacts(
+            UUID buildId,
+            Consumer<StoredArtifact> consumer
+    ) {
+
+        jdbcClient
+                .sql("SELECT document_id, pack_document_sha256, pack_document_json FROM pipeline.document_artifacts WHERE build_id = ? AND outcome = 'DONE' ORDER BY document_id")
+                .param(buildId)
+                .withFetchSize(EXPORT_FETCH_SIZE)
+                .query(rs -> {
+                    consumer
+                            .accept(new StoredArtifact(
+                                    rs
+                                            .getString("document_id"),
+                                    rs
+                                            .getString("pack_document_sha256"),
+                                    rs
+                                            .getString("pack_document_json")
+                            ));
+                });
+    }
+
+    /** SEALED Build를 Pack 기록과 함께 SUCCEEDED로, 바뀌었으면 true */
+    public boolean markSucceeded(
+            UUID buildId,
+            PackRecord pack
+    ) {
+
+        return jdbcClient
+                .sql("UPDATE pipeline.builds SET status = 'SUCCEEDED', pack_object_key = ?, pack_checksum = ?, pack_size_bytes = ?, pack_logical_sha256 = ? WHERE build_id = ? AND status = 'SEALED'")
+                .params(
+                        pack
+                                .objectKey(),
+                        pack
+                                .checksum(),
+                        pack
+                                .sizeBytes(),
+                        pack
+                                .logicalContentSha256(),
                         buildId
                 )
                 .update() == 1;

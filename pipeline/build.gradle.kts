@@ -28,4 +28,11 @@ dependencies {
 tasks.named<Test>("test") {
     // Report selector differences between jsoup's legacy and web query modes.
     systemProperty("jsoup.queryMode", "check")
+
+    // The F16 export test starts a child JVM on the test runtime classpath.
+    val testClasspath = sourceSets["test"].runtimeClasspath
+    inputs.files(testClasspath)
+    jvmArgumentProviders.add(CommandLineArgumentProvider {
+        listOf("-Ddoclens.test.pipelineClasspath=" + testClasspath.asPath)
+    })
 }

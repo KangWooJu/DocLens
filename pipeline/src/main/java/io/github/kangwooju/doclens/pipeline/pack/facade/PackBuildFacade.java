@@ -1,18 +1,26 @@
 package io.github.kangwooju.doclens.pipeline.pack.facade;
 
+import java.util.UUID;
+
 import org.springframework.stereotype.Component;
 
 import io.github.kangwooju.doclens.core.pack.dto.PackDocument;
+import io.github.kangwooju.doclens.core.pack.writer.PackWriter;
 import io.github.kangwooju.doclens.pipeline.chunk.service.ChunkService;
 import io.github.kangwooju.doclens.pipeline.global.transaction.TransactionExecutor;
 import io.github.kangwooju.doclens.pipeline.pack.dto.ArtifactRow;
 import io.github.kangwooju.doclens.pipeline.pack.dto.BuildRequest;
 import io.github.kangwooju.doclens.pipeline.pack.dto.BuildResult;
+import io.github.kangwooju.doclens.pipeline.pack.dto.BuildRow;
 import io.github.kangwooju.doclens.pipeline.pack.dto.BuildState;
+import io.github.kangwooju.doclens.pipeline.pack.dto.ExportTarget;
+import io.github.kangwooju.doclens.pipeline.pack.dto.PackRecord;
 import io.github.kangwooju.doclens.pipeline.pack.dto.ProcessingConfig;
 import io.github.kangwooju.doclens.pipeline.pack.dto.SourceEntry;
 import io.github.kangwooju.doclens.pipeline.pack.dto.SourceRead;
+import io.github.kangwooju.doclens.pipeline.pack.exception.BuildNotExportableException;
 import io.github.kangwooju.doclens.pipeline.pack.service.BuildService;
+import io.github.kangwooju.doclens.pipeline.pack.service.PackExportService;
 import io.github.kangwooju.doclens.pipeline.pack.service.ProcessingConfigService;
 import io.github.kangwooju.doclens.pipeline.pack.type.BuildStatus;
 import io.github.kangwooju.doclens.pipeline.pack.type.SourceReadOutcome;
@@ -31,9 +39,65 @@ public class PackBuildFacade {
 
     private final ProcessingConfigService processingConfigService;
     private final BuildService buildService;
+    private final PackExportService packExportService;
     private final DocumentParseService documentParseService;
     private final ChunkService chunkService;
     private final TransactionExecutor transactionExecutor;
+
+    /** ingest 뒤 봉인됐거나 이미 성공한 Build면 export까지, 같은 요청 재전송은 재개 */
+    public BuildResult build(BuildRequest request) {
+
+        BuildResult ingested = ingest(request);
+
+        if (ingested
+                .status() == BuildStatus.SEALED || ingested
+                        .status() == BuildStatus.SUCCEEDED) {
+            return export(ingested
+                    .buildId());
+        }
+
+        return ingested;
+    }
+
+    /**
+     * 봉인된 Build를 원본 없이 PostgreSQL만 읽어 Pack으로 게시
+     * RUNNING은 그대로 반환, 보류, 실패, 없는 Build는 BuildNotExportableException, 성공한 Build는 게시 파일 확인과 정리 뒤 기존 결과
+     */
+    public BuildResult export(UUID buildId) {
+
+        ExportTarget target = transactionExecutor
+                .write(() -> buildService
+                        .exportTarget(buildId));
+        BuildRow build = target
+                .build();
+
+        switch (build
+                .status()) {
+            case RUNNING -> {
+                return result(buildId);
+            }
+            case NEEDS_REVIEW, FAILED -> throw new BuildNotExportableException(
+                    buildId
+                            .toString(),
+                    "status " + build
+                            .status()
+            );
+            case SUCCEEDED -> {
+                packExportService
+                        .verifyRecorded(build);
+                packExportService
+                        .prune(build);
+
+                return result(buildId);
+            }
+            case SEALED -> {
+                return exportSealed(target);
+            }
+        }
+
+        throw new IllegalStateException("unknown status " + build
+                .status());
+    }
 
     /**
      * Build 시작 또는 재개, 산출물 없는 문서만 PARSE와 CHUNK, 모두 있으면 봉인
@@ -121,6 +185,60 @@ public class PackBuildFacade {
         return result(state);
     }
 
+    // 봉인된 Build의 Pack 채택 또는 작성, 게시, SUCCEEDED 기록, 정리
+    private BuildResult exportSealed(ExportTarget target) {
+
+        BuildRow build = target
+                .build();
+
+        if (target
+                .chunkReceipt()
+                .byteCount() > PackWriter.MAX_PACK_BYTES) {
+            throw new BuildNotExportableException(
+                    build
+                            .buildId()
+                            .toString(),
+                    "CHUNK artifacts exceed the pack size limit"
+            );
+        }
+
+        PackRecord adopted = packExportService
+                .findPublished(target);
+        PackRecord pack = adopted != null ? adopted : packExportService
+                .publish(
+                        build,
+                        packExportService
+                                .write(target)
+                );
+
+        transactionExecutor
+                .write(() -> {
+                    buildService
+                            .markSucceeded(
+                                    build
+                                            .buildId(),
+                                    pack,
+                                    target
+                                            .chunkReceipt()
+                                            .itemCount()
+                            );
+
+                    return null;
+                });
+
+        ExportTarget succeeded = transactionExecutor
+                .write(() -> buildService
+                        .exportTarget(build
+                                .buildId()));
+
+        packExportService
+                .prune(succeeded
+                        .build());
+
+        return result(build
+                .buildId());
+    }
+
     // 원본 하나의 PARSE와 CHUNK 산출물, 보류면 보류 행, CPU 작업이라 트랜잭션 밖
     private ArtifactRow artifact(SourceRead read) {
 
@@ -143,13 +261,19 @@ public class PackBuildFacade {
         }
     }
 
-    // 현재 Build 상태
+    // 시작 결과의 현재 Build 상태
     private BuildResult result(BuildState state) {
+
+        return result(state
+                .build()
+                .buildId());
+    }
+
+    // 현재 Build 상태
+    private BuildResult result(UUID buildId) {
 
         return transactionExecutor
                 .write(() -> buildService
-                        .result(state
-                                .build()
-                                .buildId()));
+                        .result(buildId));
     }
 }
