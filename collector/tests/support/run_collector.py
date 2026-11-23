@@ -2,12 +2,14 @@
 
 python -m tests.support.run_collector --port P [--pause-url URL] [--budget N] registry probe SOURCE_ID
 python -m tests.support.run_collector --port P send-pages COUNT
+python -m tests.support.run_collector --port P [--pause-key KEY [--pause-after]] [--no-lock] work [--max-wait S]
 """
 
 import argparse
 import sys
 import threading
 import time
+from contextlib import nullcontext
 from dataclasses import replace
 from uuid import uuid4
 
@@ -15,7 +17,9 @@ from collector.__main__ import main
 from collector.app import App, build_app
 from collector.config import CrawlPolicy, Settings
 from collector.crawl.transport_gate import Connector, Deferred, Fetch
+from collector.store.object_store import s3_client
 from tests.support.loopback_connector import LoopbackConnector, PausingConnector
+from tests.support.pausing_store import PausingObjectStore
 
 SCALE = 0.02
 
@@ -74,17 +78,37 @@ def run(argv: list[str]) -> int:
     parser.add_argument("--port", type=int, required=True)
     parser.add_argument("--pause-url")
     parser.add_argument("--budget", type=int)
+    parser.add_argument("--pause-key")
+    parser.add_argument("--pause-after", action="store_true")
+    # advisory lock 없는 수집 프로세스, 동시성 시험 전용
+    parser.add_argument("--no-lock", action="store_true")
     options, rest = parser.parse_known_args(argv)
+    settings = Settings.from_env()
     crawl_policy = policy(options.budget)
     connector: Connector = LoopbackConnector(options.port)
+    store = None
 
     if options.pause_url:
         connector = PausingConnector(connector, options.pause_url)
 
+    if options.pause_key:
+        store = PausingObjectStore(
+            s3_client(
+                settings.s3_endpoint,
+                settings.s3_access_key,
+                settings.s3_secret_key,
+            ),
+            settings.s3_bucket,
+            options.pause_key,
+            options.pause_after,
+        )
+
     app = build_app(
-        Settings.from_env(),
+        settings,
         connector,
+        store=store,
         policy=crawl_policy,
+        lock=(lambda: nullcontext(lambda: True)) if options.no_lock else None,
     )
 
     try:

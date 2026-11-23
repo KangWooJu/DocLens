@@ -8,7 +8,7 @@ from typing import Any
 
 import boto3
 from botocore.config import Config
-from botocore.exceptions import ClientError
+from botocore.exceptions import BotoCoreError, ClientError
 
 from collector.contract.canonical_json import JsonValue
 
@@ -24,6 +24,10 @@ EXISTS_CODES = frozenset({"PreconditionFailed", "ConditionalRequestConflict", "4
 
 class ObjectConflict(Exception):
     """같은 key에 다른 bytes"""
+
+
+# 저장 실패로 보는 예외, 호출자가 botocore를 import하지 않고 잡음
+STORAGE_ERRORS = (ClientError, BotoCoreError, ObjectConflict)
 
 
 @dataclass(frozen=True)

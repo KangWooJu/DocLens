@@ -5,8 +5,9 @@ from uuid import UUID
 from psycopg_pool import ConnectionPool
 
 from collector.contract.collection_request import CollectionRequest
+from collector.job.job_model import ClaimedJob, JobOutcome
 from collector.job.job_repository import Lease
-from collector.job.job_service import Accept, ClaimedJob, JobOutcome, JobService, JobStatus
+from collector.job.job_service import Accept, JobService, JobStatus
 
 
 class JobFacade:
@@ -39,6 +40,12 @@ class JobFacade:
     def claim(self, owner_id: UUID) -> ClaimedJob | None:
         with self._pool.connection() as conn, conn.transaction():
             return self._service.claim(conn, owner_id)
+
+    def next_due(self) -> tuple[int, float | None]:
+        """claim할 job이 없을 때 대기 job 수와 다음 기한까지 남은 초"""
+
+        with self._pool.connection() as conn:
+            return self._service.next_due(conn)
 
     def heartbeat(self, lease: Lease) -> bool:
         """autocommit 한 문장, False면 lease 상실"""

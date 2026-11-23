@@ -44,12 +44,24 @@ class FixtureServer:
         self.by_number: dict[int, Reply] = {}
         self.records: list[Record] = []
         self.max_in_flight = 0
+        self.hold_number: int | None = None
+        self.held = threading.Event()
+        self.held_path: str | None = None
+        self._release = threading.Event()
         self._in_flight = 0
         self._lock = threading.Lock()
         self._closed = threading.Event()
         self._server = ThreadingHTTPServer(("127.0.0.1", 0), self._handler())
         self._server.daemon_threads = True
         self.port = self._server.server_address[1]
+
+    def hold(self, number: int) -> None:
+        """전역 순번 number인 요청을 붙잡고 held를 켬, release까지 응답하지 않음"""
+
+        self.hold_number = number
+
+    def release(self) -> None:
+        self._release.set()
 
     def counts(self) -> Counter[str]:
         with self._lock:
@@ -102,6 +114,11 @@ class FixtureServer:
                     server.max_in_flight = max(server.max_in_flight, server._in_flight)
 
                 try:
+                    if number == server.hold_number:
+                        server.held_path = self.path
+                        server.held.set()
+                        server._release.wait()
+
                     self._answer(server._reply(self.path, number))
                 except OSError:
                     pass
@@ -159,6 +176,7 @@ class FixtureServer:
 
     def stop(self) -> None:
         self._closed.set()
+        self._release.set()
         self._server.shutdown()
         self._server.server_close()
 

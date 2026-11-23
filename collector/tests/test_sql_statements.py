@@ -12,16 +12,16 @@ from psycopg.errors import DeadlockDetected, UniqueViolation
 from psycopg.types.json import Jsonb
 
 from collector import db
+from collector.crawl import crawl_repository as crawl
 from collector.crawl import transport_gate as gate
 from collector.job import job_repository as jobs
 from collector.registry import registry_repository as sources
 from collector.registry.source_registry import definition_hash
 from tests.conftest import definition, insert_run
-from tests.support import pending_sql as pending
 
 HOST = "docs.spring.io"
 SOURCE_ID = "spring-boot-4.1.3-reference"
-SQL_MODULES = (db, jobs, sources, gate, pending)
+SQL_MODULES = (db, jobs, sources, gate, crawl)
 
 
 def statements(module: ModuleType) -> dict[str, str]:
@@ -204,6 +204,149 @@ def new_job(
     return job_id
 
 
+def close_run(
+    run: Recorder,
+    conn: psycopg.Connection,
+    job_id: UUID,
+) -> tuple[UUID, UUID, list[str]]:
+    """run, projection, batch 하나, 대상 둘을 넣고 발견 닫기"""
+
+    run_id = uuid4()
+    batch_id = uuid4()
+    (sequence,) = run(
+        conn,
+        crawl.INSERT_RUN,
+        {
+            "run_id": run_id,
+            "job_id": job_id,
+            "snapshot_id": uuid4(),
+            "scope_hash": "sha256:" + "c" * 64,
+            "source_registry_hash": "sha256:" + "c" * 64,
+        },
+    ).fetchone()
+    assert run(
+        conn,
+        crawl.INSERT_RUN,
+        {
+            "run_id": uuid4(),
+            "job_id": job_id,
+            "snapshot_id": uuid4(),
+            "scope_hash": "sha256:" + "c" * 64,
+            "source_registry_hash": "sha256:" + "c" * 64,
+        },
+    ).fetchone() is None
+    run(
+        conn,
+        crawl.INSERT_PROJECTION,
+        {
+            "run_id": run_id,
+            "project": "spring-boot",
+            "exact_version": "4.1.3",
+            "applicability": "EXACT_RELEASE",
+            "input_scope_key": "sha256:" + "d" * 64,
+            "observation_sequence": sequence,
+        },
+    )
+    assert len(run(
+        conn,
+        crawl.SELECT_PROJECTIONS,
+        {"run_id": run_id},
+    ).fetchall()) == 1
+    run(
+        conn,
+        crawl.INSERT_BATCH,
+        {
+            "batch_id": batch_id,
+            "run_id": run_id,
+            "ordinal": 0,
+            "project": "spring-boot",
+            "exact_version": "4.1.3",
+            "document_type": "REFERENCE",
+            "target_count": 2,
+        },
+    )
+    documents = []
+
+    for index in range(2):
+        document_id = "sha256:" + f"{index:064x}"
+        run(
+            conn,
+            crawl.INSERT_TARGET,
+            {
+                "run_id": run_id,
+                "document_id": document_id,
+                "batch_id": batch_id,
+                "source_id": SOURCE_ID,
+                "url": f"https://docs.spring.io/spring-boot/4.1/reference/p{index:03d}.html",
+                "attempt_cap": 3,
+            },
+        )
+        documents.append(document_id)
+
+    assert run(
+        conn,
+        crawl.CLOSE_RUN,
+        {"run_id": run_id, "official_revision": None},
+    ).rowcount == 1
+    assert run(
+        conn,
+        crawl.SELECT_RUN,
+        {"job_id": job_id},
+    ).fetchone()[7] == "CLOSED"
+    assert len(run(
+        conn,
+        crawl.SELECT_BATCHES,
+        {"run_id": run_id},
+    ).fetchall()) == 1
+    assert len(run(
+        conn,
+        crawl.SELECT_TARGETS,
+        {"run_id": run_id},
+    ).fetchall()) == 2
+    assert run(
+        conn,
+        crawl.SELECT_DUE_TARGET,
+        {"run_id": run_id},
+    ).fetchone()[0] == documents[0]
+    assert run(
+        conn,
+        crawl.SELECT_OPEN_TARGETS,
+        {"run_id": run_id},
+    ).fetchone() == (2, None)
+    return run_id, batch_id, documents
+
+
+def record_objects(
+    run: Recorder,
+    conn: psycopg.Connection,
+    run_id: UUID,
+    batch_id: UUID,
+) -> None:
+    """batch targets, outcomes, envelope, 회차 targets, discovery 기록"""
+
+    def ref(name: str) -> dict[str, object]:
+        return {"key": f"manifests/r/{name}", "hash": "sha256:" + "e" * 64, "size": 1}
+
+    for statement, owner, name in (
+        (crawl.RECORD_BATCH_TARGETS, batch_id, "b/targets.jsonl"),
+        (crawl.RECORD_OUTCOMES, batch_id, "b/outcomes.jsonl"),
+        (crawl.RECORD_ENVELOPE, batch_id, "b/envelope.json"),
+        (crawl.RECORD_RUN_TARGETS, run_id, "targets.jsonl"),
+        (crawl.RECORD_DISCOVERY, run_id, "discovery.json"),
+    ):
+        assert run(
+            conn,
+            statement,
+            {**ref(name), "owner_id": owner},
+        ).rowcount == 1
+
+    assert (
+        conn
+        .execute("SELECT discovery_state FROM collector.collection_runs WHERE run_id = %s", (run_id,))
+        .fetchone()
+    ) == ("SEALED",)
+
+
 def expire_lease(
     conn: psycopg.Connection,
     job_id: UUID,
@@ -314,7 +457,7 @@ def test_every_statement_runs_with_real_binding(conn: psycopg.Connection) -> Non
         jobs.SELECT_STATUS,
         {"job_id": job_id},
     ).fetchone()[2] == "QUEUED"
-    pending_jobs, due = run(conn, pending.NEXT_DUE).fetchone()
+    pending_jobs, due = run(conn, jobs.NEXT_DUE).fetchone()
     assert pending_jobs == 1 and due <= 0
 
     first_owner = uuid4()
@@ -333,7 +476,11 @@ def test_every_statement_runs_with_real_binding(conn: psycopg.Connection) -> Non
         jobs.HEARTBEAT,
         {**held, "lease_seconds": 30.0},
     ).fetchone() is not None
-    run_id, batch_id, (first, second) = insert_run(conn, job_id)
+    run_id, batch_id, (first, second) = close_run(
+        run,
+        conn,
+        job_id,
+    )
 
     # 문서 1: 성공, NULL 가지(kind, robots, open_seconds)
     sent = reserve(
@@ -359,7 +506,7 @@ def test_every_statement_runs_with_real_binding(conn: psycopg.Connection) -> Non
         )
         succeeded = run(
             conn,
-            pending.TARGET_SUCCEEDED,
+            crawl.TARGET_SUCCEEDED,
             {
                 "run_id": run_id,
                 "document_id": first,
@@ -443,7 +590,7 @@ def test_every_statement_runs_with_real_binding(conn: psycopg.Connection) -> Non
     retry = {"run_id": run_id, "document_id": second, "epoch": 2, "delay_seconds": 0.0}
     assert run(
         conn,
-        pending.TARGET_RETRY,
+        crawl.TARGET_RETRY,
         retry,
     ).rowcount == 1
     interrupted = reserve(
@@ -460,7 +607,7 @@ def test_every_statement_runs_with_real_binding(conn: psycopg.Connection) -> Non
     ).rowcount == 1
     failed = run(
         conn,
-        pending.TARGET_FAILED,
+        crawl.TARGET_FAILED,
         {
             "run_id": run_id,
             "document_id": second,
@@ -482,6 +629,25 @@ def test_every_statement_runs_with_real_binding(conn: psycopg.Connection) -> Non
     ) == (3, "FAILED")
     assert run(
         conn,
+        crawl.SELECT_ATTEMPT,
+        {"run_id": run_id, "document_id": second},
+    ).fetchone() == (3,)
+    links = [
+        "https://docs.spring.io/spring-boot/4.1/reference/p000.html",
+        "https://docs.spring.io/spring-boot/4.1/reference/p999.html",
+    ]
+    assert run(
+        conn,
+        crawl.COUNT_UNKNOWN_LINKS,
+        {"run_id": run_id, "urls": links},
+    ).fetchone() == (1,)
+    assert run(
+        conn,
+        crawl.SELECT_OPEN_TARGETS,
+        {"run_id": run_id},
+    ).fetchone() == (0, None)
+    assert run(
+        conn,
         gate.RESERVE_ATTEMPT_EXHAUSTED,
         {"run_id": run_id, "document_id": second},
     ).fetchone() == (True,)
@@ -497,34 +663,20 @@ def test_every_statement_runs_with_real_binding(conn: psycopg.Connection) -> Non
         )
         assert run(
             conn,
-            pending.SEAL_APPROVAL_RECHECK,
+            crawl.SEAL_APPROVAL_RECHECK,
             {"request_inputs": Jsonb(inputs)},
         ).fetchone() == (0,)
         assert run(
             conn,
-            pending.SEAL_BATCH,
+            crawl.SEAL_BATCH,
             {"batch_id": batch_id, "epoch": 2},
         ).rowcount == 1
 
-    conn.execute(
-        """
-        UPDATE collector.collection_batches
-        SET targets_key = 'manifests/r/b/targets.jsonl', targets_hash = %(hash)s, targets_size = 1,
-            outcomes_key = 'manifests/r/b/outcomes.jsonl', outcomes_hash = %(hash)s, outcomes_size = 1,
-            envelope_key = 'manifests/r/b/envelope.json', envelope_hash = %(hash)s, envelope_size = 1
-        WHERE batch_id = %(batch_id)s
-        """,
-        {"batch_id": batch_id, "hash": "sha256:" + "e" * 64},
-    )
-    conn.execute(
-        """
-        UPDATE collector.collection_runs
-        SET discovery_state = 'SEALED', sealed_at = clock_timestamp(),
-            targets_key = 'discovery/r/targets.jsonl', targets_hash = %(hash)s, targets_size = 1,
-            discovery_key = 'discovery/r/discovery.json', discovery_hash = %(hash)s, discovery_size = 1
-        WHERE run_id = %(run_id)s
-        """,
-        {"run_id": run_id, "hash": "sha256:" + "e" * 64},
+    record_objects(
+        run,
+        conn,
+        run_id,
+        batch_id,
     )
     ready = {"key": "manifests/r/ready-run.json", "hash": "sha256:" + "f" * 64, "size": 99}
 
@@ -536,7 +688,7 @@ def test_every_statement_runs_with_real_binding(conn: psycopg.Connection) -> Non
         )
         assert run(
             conn,
-            pending.READY_RUN_FIX,
+            crawl.READY_RUN_FIX,
             {"run_id": run_id, "new_uuid": uuid4()},
         ).rowcount == 1
 
@@ -548,8 +700,8 @@ def test_every_statement_runs_with_real_binding(conn: psycopg.Connection) -> Non
         )
         assert run(
             conn,
-            pending.READY_RUN_RECORD,
-            {**ready, "run_id": run_id},
+            crawl.READY_RUN_RECORD,
+            {**ready, "owner_id": run_id},
         ).rowcount == 1
         assert run(
             conn,
@@ -566,10 +718,10 @@ def test_every_statement_runs_with_real_binding(conn: psycopg.Connection) -> Non
     )
     assert run(
         conn,
-        pending.RUN_DRIFT,
+        crawl.RUN_DRIFT,
         {"run_id": drift_run},
     ).rowcount == 1
-    assert conn.execute(pending.READY_RUN_FIX, {"run_id": drift_run, "new_uuid": uuid4()}).rowcount == 0
+    assert conn.execute(crawl.READY_RUN_FIX, {"run_id": drift_run, "new_uuid": uuid4()}).rowcount == 0
 
     # 종결 4종: 다음 KST 00:00 대기, 숫자 대기, 검토, 실패 뒤 재개와 취소
     owner = uuid4()
@@ -718,7 +870,7 @@ def test_every_statement_runs_with_real_binding(conn: psycopg.Connection) -> Non
     ) is None
     assert (
         conn
-        .execute(pending.SEAL_APPROVAL_RECHECK, {"request_inputs": Jsonb(inputs)})
+        .execute(crawl.SEAL_APPROVAL_RECHECK, {"request_inputs": Jsonb(inputs)})
         .fetchone()
     ) == (1,)
 

@@ -26,6 +26,7 @@ EXIT_CODES: dict[str, tuple[dict[str, int], int]] = {
     "status": ({"NOT_FOUND": 4}, 3),
     "cancel": ({"NOT_FOUND": 4}, 3),
     "resume": ({"NOT_FOUND": 4}, 3),
+    "work": ({}, 2),
 }
 
 
@@ -56,6 +57,13 @@ def parser() -> argparse.ArgumentParser:
         job_parser = commands.add_parser(name)
         job_parser.add_argument("job_id", type=UUID)
 
+    work = commands.add_parser("work")
+    work.add_argument(
+        "--max-wait",
+        type=float,
+        metavar="SECONDS",
+    )
+
     return root
 
 
@@ -69,6 +77,9 @@ def main(
     app = app or build_app(Settings.from_env(), PinnedHttpsConnector())
 
     try:
+        if command == "work":
+            return work(app, args.max_wait)
+
         outputs = run(app, args)
 
         for definition, value in outputs:
@@ -146,6 +157,23 @@ def run(
             return [("status", status.to_json())]
 
     raise AssertionError(args)
+
+
+def work(
+    app: App,
+    max_wait: float | None,
+) -> int:
+    """연락처가 없으면 시작 거부, 처리한 job마다 status 한 줄"""
+
+    app.gate.check_contact()
+    return app.worker.run(
+        max_wait,
+        lambda status: emit(
+            "status",
+            status.to_json(),
+            sys.stdout,
+        ),
+    )
 
 
 def read_request(path: Path) -> CollectionRequest:

@@ -76,6 +76,18 @@ WHERE j.job_id = (
 RETURNING j.job_id, j.lease_epoch, j.request_body
 """
 
+# work 대기 계산, 취소 요청된 RUNNING도 lease 만료 뒤 정리될 때까지 대기로 셈
+NEXT_DUE = """
+SELECT count(*) AS pending,
+       extract(epoch FROM min(CASE WHEN state = 'RETRY_WAIT' THEN next_attempt_at
+                                   WHEN state = 'QUEUED' THEN clock_timestamp()
+                                   WHEN state = 'RUNNING' THEN lease_until END)
+                          - clock_timestamp()) AS next_due_seconds
+FROM collector.jobs
+WHERE (state IN ('QUEUED', 'RETRY_WAIT') AND NOT cancel_requested)
+   OR state = 'RUNNING'
+"""
+
 HEARTBEAT = """
 UPDATE collector.jobs
 SET lease_until = clock_timestamp() + make_interval(secs => %(lease_seconds)s),
@@ -315,6 +327,17 @@ class JobRepository:
             )
             .fetchone()
         )
+
+    def next_due(self, conn: Conn) -> tuple[int, float | None]:
+        """대기 job 수와 가장 이른 기한까지 PG가 계산한 남은 초"""
+
+        row = (
+            conn
+            .execute(NEXT_DUE)
+            .fetchone()
+        )
+        assert row is not None
+        return row[0], None if row[1] is None else float(row[1])
 
     def heartbeat(
         self,

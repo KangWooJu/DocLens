@@ -103,6 +103,7 @@ class Retry:
     delay_seconds: float
     http_status: int | None
     error_code: str
+    observed_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -110,6 +111,7 @@ class Rejected:
     error_code: str
     needs_review: bool
     http_status: int | None
+    observed_at: datetime | None = None
 
 
 def next_host_state(
@@ -205,7 +207,7 @@ def classify(
 
     if isinstance(response, TransportFailed):
         if response.retryable:
-            return _retry(
+            return retry(
                 attempt,
                 None,
                 policy,
@@ -226,7 +228,7 @@ def classify(
         return Rejected("INVALID_BODY", True, status)
 
     if status in RETRY_STATUSES or status >= 500:
-        return _retry(
+        return retry(
             attempt,
             status,
             policy,
@@ -253,11 +255,13 @@ def content_type(headers: Mapping[str, str]) -> str:
     )
 
 
-def _retry(
+def retry(
     attempt: int,
     status: int | None,
     policy: CrawlPolicy,
 ) -> Retry | Rejected:
+    """attempt번째 시도가 재시도 가능한 실패, 상한이면 HTTP_RETRY_EXHAUSTED"""
+
     if attempt >= policy.attempt_cap:
         return Rejected("HTTP_RETRY_EXHAUSTED", True, status)
 
