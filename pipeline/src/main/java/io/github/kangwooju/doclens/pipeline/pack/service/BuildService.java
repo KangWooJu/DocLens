@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 
 import io.github.kangwooju.doclens.core.json.CanonicalJson;
 import io.github.kangwooju.doclens.core.pack.dto.PackDocument;
+import io.github.kangwooju.doclens.pipeline.global.store.ObjectStore;
 import io.github.kangwooju.doclens.pipeline.pack.converter.PackDocumentConverter;
 import io.github.kangwooju.doclens.pipeline.pack.dto.ArtifactRow;
 import io.github.kangwooju.doclens.pipeline.pack.dto.BuildRequest;
@@ -35,7 +36,6 @@ import io.github.kangwooju.doclens.pipeline.pack.helper.BuildDigestHelper;
 import io.github.kangwooju.doclens.pipeline.pack.policy.BuildRequestPolicy;
 import io.github.kangwooju.doclens.pipeline.pack.policy.ProcessingConfigPolicy;
 import io.github.kangwooju.doclens.pipeline.pack.repository.BuildRepository;
-import io.github.kangwooju.doclens.pipeline.pack.store.LocalObjectStore;
 import io.github.kangwooju.doclens.pipeline.pack.type.ArtifactOutcome;
 import io.github.kangwooju.doclens.pipeline.pack.type.BuildStatus;
 import io.github.kangwooju.doclens.pipeline.pack.type.SourceReadOutcome;
@@ -56,7 +56,7 @@ public class BuildService {
     private final BuildRepository buildRepository;
     private final BuildRequestPolicy buildRequestPolicy;
     private final BuildDigestHelper buildDigestHelper;
-    private final LocalObjectStore localObjectStore;
+    private final ObjectStore objectStore;
     private final StructuredDocumentConverter structuredDocumentConverter;
     private final PackDocumentConverter packDocumentConverter;
 
@@ -146,13 +146,13 @@ public class BuildService {
         );
     }
 
-    /** 원본 bytes를 읽어 원본 문서로, 파일 없음과 hash 불일치는 결과로 알림 */
+    /** 객체 저장소의 원본 bytes를 읽어 원본 문서로, 객체 없음과 hash 불일치는 결과로 알림 */
     public SourceRead readSource(
             BuildRow build,
             SourceEntry source
     ) {
 
-        Optional<byte[]> bytes = localObjectStore
+        Optional<byte[]> bytes = objectStore
                 .read(source
                         .rawObjectKey());
 

@@ -31,6 +31,7 @@ import io.github.kangwooju.doclens.core.pack.dto.PackWriteResult;
 import io.github.kangwooju.doclens.core.pack.reader.PackReader;
 import io.github.kangwooju.doclens.core.pack.type.PackMetaKey;
 import io.github.kangwooju.doclens.core.pack.writer.PackWriter;
+import io.github.kangwooju.doclens.pipeline.global.store.ObjectStore;
 import io.github.kangwooju.doclens.pipeline.global.transaction.TransactionExecutor;
 import io.github.kangwooju.doclens.pipeline.pack.converter.PackDocumentConverter;
 import io.github.kangwooju.doclens.pipeline.pack.dto.BuildRow;
@@ -44,8 +45,9 @@ import io.github.kangwooju.doclens.pipeline.pack.store.LocalObjectStore;
 import lombok.RequiredArgsConstructor;
 
 /**
- * 봉인된 Build의 Pack 작성, 검증, 게시, 정리
+ * 봉인된 Build의 Pack 작성, 검증, 게시, 업로드, 정리
  * snapshot 트랜잭션은 SQLite 쓰기와 임시 파일 수명과 한 알고리즘이라 write 안에서 열고 finish는 그 밖에서 함
+ * 작업 디렉터리는 로컬 저장소, 업로드와 확인은 객체 저장소
  */
 @Service
 @RequiredArgsConstructor
@@ -60,6 +62,7 @@ public class PackExportService {
     private final TransactionExecutor transactionExecutor;
     private final BuildRepository buildRepository;
     private final LocalObjectStore localObjectStore;
+    private final ObjectStore objectStore;
     private final PackDocumentConverter packDocumentConverter;
     private final BuildDigestHelper buildDigestHelper;
 
@@ -189,19 +192,47 @@ public class PackExportService {
         }
     }
 
-    /** SUCCEEDED Build가 기록한 파일의 존재와 checksum, 다르면 BuildArtifactMissingException */
+    /** 로컬에 게시한 Pack을 같은 object key로 객체 저장소에 한 번만 게시 */
+    public void upload(PackRecord pack) {
+
+        objectStore
+                .publish(
+                        pack
+                                .objectKey(),
+                        localObjectStore
+                                .resolve(pack
+                                        .objectKey()),
+                        pack
+                                .checksum()
+                );
+    }
+
+    /**
+     * SUCCEEDED Build가 기록한 객체의 존재와 checksum
+     * 객체 저장소에 없고 로컬 Pack이 기록과 같으면 다시 업로드, 둘 다 없으면 BuildArtifactMissingException
+     */
     public PackRecord verifyRecorded(BuildRow build) {
 
         PackRecord pack = build
                 .pack();
-        Path file = localObjectStore
-                .resolve(pack
-                        .objectKey());
 
-        if (!Files
-                .isRegularFile(file) || !sha256(file)
-                        .equals(pack
-                                .checksum())) {
+        if (objectStore
+                .contains(
+                        pack
+                                .objectKey(),
+                        pack
+                                .checksum()
+                )) {
+            return pack;
+        }
+
+        if (!localObjectStore
+                .contains(
+                        pack
+                                .objectKey(),
+                        pack
+                                .checksum()
+                )) {
             throw new BuildArtifactMissingException(
                     build
                             .buildId()
@@ -210,6 +241,8 @@ public class PackExportService {
                             .objectKey()
             );
         }
+
+        upload(pack);
 
         return pack;
     }
