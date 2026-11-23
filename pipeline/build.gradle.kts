@@ -11,6 +11,8 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.flywaydb:flyway-database-postgresql")
     implementation(libs.jsoup)
+    implementation(platform(libs.aws.sdk.bom))
+    implementation("software.amazon.awssdk:s3")
     runtimeOnly("org.postgresql:postgresql")
 
     compileOnly(platform(libs.spring.boot.dependencies))

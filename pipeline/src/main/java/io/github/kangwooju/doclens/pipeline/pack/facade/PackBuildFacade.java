@@ -61,7 +61,7 @@ public class PackBuildFacade {
 
     /**
      * 봉인된 Build를 원본 없이 PostgreSQL만 읽어 Pack으로 게시
-     * RUNNING은 그대로 반환, 보류, 실패, 없는 Build는 BuildNotExportableException, 성공한 Build는 게시 파일 확인과 정리 뒤 기존 결과
+     * RUNNING은 그대로 반환, 보류, 실패, 없는 Build는 BuildNotExportableException, 성공한 Build는 게시 객체 확인과 정리 뒤 기존 결과
      */
     public BuildResult export(UUID buildId) {
 
@@ -185,7 +185,7 @@ public class PackBuildFacade {
         return result(state);
     }
 
-    // 봉인된 Build의 Pack 채택 또는 작성, 게시, SUCCEEDED 기록, 정리
+    // 봉인된 Build의 Pack 채택 또는 작성, 게시, 업로드, SUCCEEDED 기록, 정리
     private BuildResult exportSealed(ExportTarget target) {
 
         BuildRow build = target
@@ -210,6 +210,9 @@ public class PackBuildFacade {
                         packExportService
                                 .write(target)
                 );
+
+        packExportService
+                .upload(pack);
 
         transactionExecutor
                 .write(() -> {
