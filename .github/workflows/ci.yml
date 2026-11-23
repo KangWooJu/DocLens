@@ -48,6 +48,8 @@ jobs:
   collector:
     name: Collector checks
     runs-on: ubuntu-latest
+    # pytest starts PostgreSQL 17, Flyway and S3Mock containers through Testcontainers
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: collector
