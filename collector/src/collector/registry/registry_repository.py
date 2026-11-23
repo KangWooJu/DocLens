@@ -1,6 +1,7 @@
 """collector.sources SQL"""
 
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 
 from psycopg.types.json import Jsonb
 
@@ -50,12 +51,31 @@ WHERE source_id = %(source_id)s AND approval_state = 'BLOCKED'
 RETURNING definition_hash
 """
 
+# 첫 TX에서 읽은 정의일 때만, probe 도중 재import됐으면 0 row
+RECORD_PROBE = """
+UPDATE collector.sources
+SET probe_state = %(state)s, probe_version = %(version)s, probe_raw_hash = %(raw_hash)s,
+    probed_at = clock_timestamp()
+WHERE source_id = %(source_id)s AND approval_state = 'BLOCKED'
+  AND definition_hash = %(probed_hash)s
+RETURNING source_id
+"""
+
 REVOKE = """
 UPDATE collector.sources
 SET approval_state = 'REVOKED', revoked_by = %(by)s, revoked_at = clock_timestamp()
 WHERE source_id = %(source_id)s AND approval_state = 'APPROVED'
 RETURNING definition_hash
 """
+
+
+@dataclass(frozen=True)
+class ProbeEvidence:
+    """probe 기록 값"""
+
+    state: str
+    version: str | None
+    raw_hash: str | None
 
 
 class RegistryRepository:
@@ -162,6 +182,30 @@ class RegistryRepository:
                 {
                     "source_id": source_id,
                     "by": revoked_by,
+                },
+            )
+            .fetchone()
+        )
+        return row is not None
+
+
+    def record_probe(
+        self,
+        conn: Conn,
+        source_id: str,
+        probed_hash: str,
+        result: ProbeEvidence,
+    ) -> bool:
+        row = (
+            conn
+            .execute(
+                RECORD_PROBE,
+                {
+                    "source_id": source_id,
+                    "probed_hash": probed_hash,
+                    "state": result.state,
+                    "version": result.version,
+                    "raw_hash": result.raw_hash,
                 },
             )
             .fetchone()

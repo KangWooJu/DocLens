@@ -12,11 +12,13 @@ from collector.config import Settings
 from collector.contract import schema
 from collector.contract.canonical_json import JsonValue
 from collector.contract.collection_request import CollectionRequest
+from collector.crawl.transport_gate import PinnedHttpsConnector
 from collector.errors import RequestRejected
 
 # 명령별 거부 code의 종료 코드, 없는 code는 default
 EXIT_CODES: dict[str, tuple[dict[str, int], int]] = {
     "registry import": ({"VALIDATION_FAILED": 2}, 3),
+    "registry probe": ({"NOT_FOUND": 2, "VALIDATION_FAILED": 2}, 3),
     "registry approve": ({"NOT_FOUND": 2}, 3),
     "registry revoke": ({"NOT_FOUND": 2}, 3),
     "request": ({}, 2),
@@ -35,6 +37,8 @@ def parser() -> argparse.ArgumentParser:
     registry = registry_parser.add_subparsers(dest="registry_command", required=True)
     import_parser = registry.add_parser("import")
     import_parser.add_argument("file", type=Path)
+    probe = registry.add_parser("probe")
+    probe.add_argument("source_id")
     approve = registry.add_parser("approve")
     approve.add_argument("source_id")
     approve.add_argument("--by", required=True)
@@ -62,10 +66,12 @@ def main(
     args = parser().parse_args(argv)
     command = args.command if args.command != "registry" else f"registry {args.registry_command}"
     owned = app is None
-    app = app or build_app(Settings.from_env())
+    app = app or build_app(Settings.from_env(), PinnedHttpsConnector())
 
     try:
-        for definition, value in run(app, args):
+        outputs = run(app, args)
+
+        for definition, value in outputs:
             emit(
                 definition,
                 value,
@@ -90,6 +96,9 @@ def main(
         if owned:
             app.close()
 
+    if command == "registry probe" and outputs[0][1]["probeState"] == "FAILED":
+        return 4
+
     return 0
 
 
@@ -108,6 +117,8 @@ def run(
     match args.command, registry_command:
         case "registry", "import":
             return [(None, row.to_json()) for row in app.registry.import_file(args.file)]
+        case "registry", "probe":
+            return [(None, app.registry.probe(args.source_id).to_json())]
         case "registry", "approve":
             view = app.registry.approve(
                 args.source_id,

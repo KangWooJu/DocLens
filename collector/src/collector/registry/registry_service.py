@@ -10,15 +10,28 @@ from uuid import uuid4
 
 from collector.contract.canonical_json import JsonValue, utc_text
 from collector.contract.collection_request import CollectionRequest, RequestInput
+from collector.crawl.page_markers import read_markers
+from collector.crawl.send_policy import MIN_MAIN_CHARS, TransportFailed, content_type
+from collector.crawl.transport_gate import (
+    Deferred,
+    Fetch,
+    RobotsDenied,
+    RobotsUnreachable,
+    SourceUnapproved,
+    TransportGate,
+    UrlDenied,
+)
 from collector.db import Conn
 from collector.errors import RequestRejected
-from collector.registry.registry_repository import RegistryRepository
+from collector.registry.registry_repository import ProbeEvidence, RegistryRepository
 from collector.registry.source_registry import (
     DefinitionInvalid,
+    Source,
     definition_hash,
     parse_definition,
     registry_hash,
 )
+from collector.store.object_store import ObjectRef, ObjectStore, raw_key
 
 PARSER_PROFILE_REF = re.compile(r"[a-z0-9][a-z0-9-]*@[0-9]+")
 
@@ -49,9 +62,52 @@ class RegistryView:
         }
 
 
+@dataclass(frozen=True)
+class ProbeResult:
+    """entry 표본 하나의 판정과 운영자 출력"""
+
+    state: str
+    version: str | None
+    raw: ObjectRef | None
+    nav_count: int
+    main_chars: int
+
+    def evidence(self) -> ProbeEvidence:
+        return ProbeEvidence(
+            state=self.state,
+            version=self.version,
+            raw_hash=None if self.raw is None else self.raw.content_hash,
+        )
+
+    def to_json(self) -> dict[str, JsonValue]:
+        return {
+            "probeState": self.state,
+            "probeVersion": self.version,
+            "raw": None if self.raw is None else self.raw.to_json(),
+            "navCount": self.nav_count,
+            "mainChars": self.main_chars,
+        }
+
+
+FAILED_PROBE = ProbeResult(
+    state="FAILED",
+    version=None,
+    raw=None,
+    nav_count=0,
+    main_chars=0,
+)
+
+
 class RegistryService:
-    def __init__(self, repository: RegistryRepository) -> None:
+    def __init__(
+        self,
+        repository: RegistryRepository,
+        gate: TransportGate,
+        store: ObjectStore,
+    ) -> None:
         self._repository = repository
+        self._gate = gate
+        self._store = store
 
     def read(self, path: Path) -> tuple[Mapping[str, JsonValue], ...]:
         """registry 정의 파일의 source entry 목록, 형식 오류는 VALIDATION_FAILED"""
@@ -162,6 +218,86 @@ class RegistryService:
             parser_profile_ref,
         )
         return self._view(conn, "APPROVED")
+
+    def probe_target(
+        self,
+        conn: Conn,
+        source_id: str,
+    ) -> tuple[Source, str]:
+        """BLOCKED source의 정의와 그 definition_hash, 연락처가 없으면 시작 거부"""
+
+        self._gate.check_contact()
+        definition, current_hash, state, _, _ = self._locked(conn, source_id)
+
+        if state != "BLOCKED":
+            raise RequestRejected("INVALID_TRANSITION", f"{source_id} is {state}, only BLOCKED can be probed")
+
+        return parse_definition(definition), current_hash
+
+    def probe_entry(self, source: Source) -> ProbeResult:
+        """TX 밖: robots와 entry를 gate로 한 번씩, entry 원본 저장, 표지 판정"""
+
+        fetch = Fetch(
+            url=source.entry_url,
+            purpose="DISCOVERY",
+            source_id=source.source_id,
+            scope=source.scope,
+        )
+
+        try:
+            response = self._gate.send(None, fetch)
+        except SourceUnapproved as error:
+            raise RequestRejected("INVALID_TRANSITION", f"{source.source_id} is no longer BLOCKED") from error
+        except (RobotsDenied, RobotsUnreachable, UrlDenied, TransportFailed):
+            return FAILED_PROBE
+
+        if isinstance(response, Deferred):
+            code = "BUDGET_EXHAUSTED" if response.reason == "BUDGET" else "HTTP_RETRY_EXHAUSTED"
+            raise RequestRejected(code, f"probe deferred by {response.reason}, retry later")
+
+        if response.status != 200:
+            return FAILED_PROBE
+
+        raw = self._store.put_once(
+            raw_key(
+                source.project,
+                source.exact_version,
+                response.body,
+            ),
+            response.body,
+        )
+        markers = read_markers(response.body)
+        passed = (
+            content_type(response.headers) == "text/html"
+            and not markers.denied
+            and markers.main_chars >= MIN_MAIN_CHARS
+            and len(markers.nav_hrefs) > 0
+            and markers.version == source.exact_version
+        )
+        return ProbeResult(
+            state="PASSED" if passed else "FAILED",
+            version=markers.version,
+            raw=raw,
+            nav_count=len(markers.nav_hrefs),
+            main_chars=markers.main_chars,
+        )
+
+    def record_probe(
+        self,
+        conn: Conn,
+        source_id: str,
+        probed_hash: str,
+        result: ProbeResult,
+    ) -> None:
+        recorded = self._repository.record_probe(
+            conn,
+            source_id,
+            probed_hash,
+            result.evidence(),
+        )
+
+        if not recorded:
+            raise RequestRejected("INVALID_TRANSITION", f"{source_id} definition changed during probe")
 
     def revoke(
         self,
