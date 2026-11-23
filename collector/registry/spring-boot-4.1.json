@@ -1,0 +1,25 @@
+{
+  "registryVersion": 1,
+  "sources": [
+    {
+      "sourceId": "spring-boot-4.1.3-reference",
+      "project": "spring-boot",
+      "exactVersion": "4.1.3",
+      "sourceType": "html",
+      "documentType": "REFERENCE",
+      "required": true,
+      "applicability": "EXACT_RELEASE",
+      "entryUrl": "https://docs.spring.io/spring-boot/4.1/reference/index.html",
+      "canonicalRoot": "https://docs.spring.io/spring-boot/4.1/reference/",
+      "allowedHosts": ["docs.spring.io"],
+      "allowedPathPrefixes": ["/spring-boot/4.1/reference/"],
+      "allowedQueryKeys": [],
+      "redirectHosts": [],
+      "excludePathPrefixes": [],
+      "discoveryRuleId": "antora-nav-closed-v1",
+      "bodySelectorRuleId": "boot-antora-v1",
+      "versionRuleId": "antora-meta-version-v1",
+      "officialLinkEvidence": "https://spring.io/projects/spring-boot"
+    }
+  ]
+}

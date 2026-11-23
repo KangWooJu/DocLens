@@ -6,11 +6,11 @@ from pathlib import Path
 from psycopg_pool import ConnectionPool
 
 from collector.contract.collection_request import CollectionRequest
-from collector.registry.registry_service import ImportedSource, RegistryService, RegistryView
+from collector.registry.registry_service import ImportedSource, ProbeResult, RegistryService, RegistryView
 
 
 class RegistryFacade:
-    """registry import, 승인, 철회, 요청 초안의 TX 범위"""
+    """registry import, probe, 승인, 철회, 요청 초안의 TX 범위"""
 
     def __init__(
         self,
@@ -25,6 +25,24 @@ class RegistryFacade:
 
         with self._pool.connection() as conn, conn.transaction():
             return self._service.import_entries(conn, entries)
+
+    def probe(self, source_id: str) -> ProbeResult:
+        """BLOCKED 확인 TX, TX 밖 표본 송신, 같은 정의일 때만 기록하는 TX"""
+
+        with self._pool.connection() as conn, conn.transaction():
+            source, probed_hash = self._service.probe_target(conn, source_id)
+
+        result = self._service.probe_entry(source)
+
+        with self._pool.connection() as conn, conn.transaction():
+            self._service.record_probe(
+                conn,
+                source_id,
+                probed_hash,
+                result,
+            )
+
+        return result
 
     def approve(
         self,

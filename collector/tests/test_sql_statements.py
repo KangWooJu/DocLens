@@ -12,6 +12,7 @@ from psycopg.errors import DeadlockDetected, UniqueViolation
 from psycopg.types.json import Jsonb
 
 from collector import db
+from collector.crawl import transport_gate as gate
 from collector.job import job_repository as jobs
 from collector.registry import registry_repository as sources
 from collector.registry.source_registry import definition_hash
@@ -20,7 +21,7 @@ from tests.support import pending_sql as pending
 
 HOST = "docs.spring.io"
 SOURCE_ID = "spring-boot-4.1.3-reference"
-SQL_MODULES = (db, jobs, sources, pending)
+SQL_MODULES = (db, jobs, sources, gate, pending)
 
 
 def statements(module: ModuleType) -> dict[str, str]:
@@ -83,24 +84,24 @@ def reserve(
 
         approval = run(
             conn,
-            pending.RESERVE_APPROVAL,
+            gate.RESERVE_APPROVAL,
             {"source_id": SOURCE_ID, "is_probe": held is None},
         )
         assert approval.fetchone() is not None
         run(
             conn,
-            pending.RESERVE_HOST_INSERT,
+            gate.RESERVE_HOST_INSERT,
             {"host": HOST},
         )
         host = run(
             conn,
-            pending.RESERVE_HOST_LOCK,
+            gate.RESERVE_HOST_LOCK,
             {"host": HOST},
         ).fetchone()
         assert host is not None and host[7] <= 0
         run(
             conn,
-            pending.RESERVE_EXPIRE,
+            gate.RESERVE_EXPIRE,
             {"in_flight_expiry_seconds": 150.0},
         )
 
@@ -108,14 +109,14 @@ def reserve(
             run_id, document_id = document
             attempt = run(
                 conn,
-                pending.RESERVE_ATTEMPT,
+                gate.RESERVE_ATTEMPT,
                 {"run_id": run_id, "document_id": document_id, "epoch": held["epoch"]},
             ).fetchone()
             assert attempt is not None
 
         (send_id,) = run(
             conn,
-            pending.RESERVE_SEND,
+            gate.RESERVE_SEND,
             {
                 "budget_limit": 3000,
                 "host": HOST,
@@ -138,30 +139,30 @@ def finish_send(
     status: int | None,
     kind: str | None,
     robots: tuple[int, str] | None = None,
-    open_until: str | None = None,
+    open_seconds: float | None = None,
 ) -> None:
     """결과 TX: host 행, 송신 행, host 상태"""
 
     with conn.transaction():
         run(
             conn,
-            pending.RESULT_HOST_LOCK,
+            gate.RESULT_HOST_LOCK,
             {"host": HOST},
         )
         assert run(
             conn,
-            pending.RESULT_SENT,
+            gate.RESULT_SENT,
             {"send_id": send_id, "status": status, "kind": kind},
         ).rowcount == 1
         run(
             conn,
-            pending.RESULT_HOST_UPDATE,
+            gate.RESULT_HOST_UPDATE,
             {
                 "host": HOST,
                 "wait_seconds": 0.0,
                 "failures": 0 if kind is None else 1,
                 "level": 0,
-                "open_until": open_until,
+                "open_seconds": open_seconds,
                 "half_open": False,
                 "throttle": 0,
                 "robots_status": None if robots is None else robots[0],
@@ -259,12 +260,12 @@ def test_every_statement_runs_with_real_binding(conn: psycopg.Connection) -> Non
     probe = {"state": "PASSED", "version": "4.1.3", "raw_hash": "sha256:" + "a" * 64, "source_id": SOURCE_ID}
     assert run(
         conn,
-        pending.RECORD_PROBE,
+        sources.RECORD_PROBE,
         {**probe, "probed_hash": old_hash},
     ).fetchone() is None
     assert run(
         conn,
-        pending.RECORD_PROBE,
+        sources.RECORD_PROBE,
         {**probe, "probed_hash": new_hash},
     ).fetchone() == (SOURCE_ID,)
     approved = run(
@@ -281,7 +282,7 @@ def test_every_statement_runs_with_real_binding(conn: psycopg.Connection) -> Non
     ).fetchall()) == 1
     assert run(
         conn,
-        pending.RESERVE_APPROVAL,
+        gate.RESERVE_APPROVAL,
         {"source_id": SOURCE_ID, "is_probe": True},
     ).fetchone() is None
     assert (
@@ -334,7 +335,7 @@ def test_every_statement_runs_with_real_binding(conn: psycopg.Connection) -> Non
     ).fetchone() is not None
     run_id, batch_id, (first, second) = insert_run(conn, job_id)
 
-    # 문서 1: 성공, NULL 가지(kind, robots, open_until)
+    # 문서 1: 성공, NULL 가지(kind, robots, open_seconds)
     sent = reserve(
         run,
         conn,
@@ -437,7 +438,7 @@ def test_every_statement_runs_with_real_binding(conn: psycopg.Connection) -> Non
         timed_out,
         None,
         "TIMEOUT",
-        open_until="2026-01-01T00:00:00Z",
+        open_seconds=0.0,
     )
     retry = {"run_id": run_id, "document_id": second, "epoch": 2, "delay_seconds": 0.0}
     assert run(
@@ -454,7 +455,7 @@ def test_every_statement_runs_with_real_binding(conn: psycopg.Connection) -> Non
     )
     assert run(
         conn,
-        pending.RESULT_UNKNOWN,
+        gate.RESULT_UNKNOWN,
         {"send_id": interrupted},
     ).rowcount == 1
     failed = run(
@@ -479,6 +480,11 @@ def test_every_statement_runs_with_real_binding(conn: psycopg.Connection) -> Non
         )
         .fetchone()
     ) == (3, "FAILED")
+    assert run(
+        conn,
+        gate.RESERVE_ATTEMPT_EXHAUSTED,
+        {"run_id": run_id, "document_id": second},
+    ).fetchone() == (True,)
 
     # 봉인: 승인 재확인, batch 값 고정, readyRun 고정, readyRun 기록과 SUCCEEDED
     inputs = [{"sourceId": SOURCE_ID}]
@@ -707,7 +713,7 @@ def test_every_statement_runs_with_real_binding(conn: psycopg.Connection) -> Non
     ).fetchone() == (new_hash,)
     assert (
         conn
-        .execute(pending.RESERVE_APPROVAL, {"source_id": SOURCE_ID, "is_probe": False})
+        .execute(gate.RESERVE_APPROVAL, {"source_id": SOURCE_ID, "is_probe": False})
         .fetchone()
     ) is None
     assert (
@@ -762,11 +768,11 @@ def open_send(conn: psycopg.Connection) -> int:
         "INSERT INTO collector.sources (source_id, definition, definition_hash) VALUES (%s, %s, %s)",
         (SOURCE_ID, Jsonb(entry), definition_hash(entry)),
     )
-    conn.execute(pending.RESERVE_HOST_INSERT, {"host": HOST})
+    conn.execute(gate.RESERVE_HOST_INSERT, {"host": HOST})
     (send_id,) = (
         conn
         .execute(
-            pending.RESERVE_SEND,
+            gate.RESERVE_SEND,
             {
                 "budget_limit": 3000,
                 "host": HOST,
@@ -793,13 +799,13 @@ def reservation_until_insert(
         with conn.transaction():
             assert (
                 conn
-                .execute(pending.RESERVE_APPROVAL, {"source_id": SOURCE_ID, "is_probe": True})
+                .execute(gate.RESERVE_APPROVAL, {"source_id": SOURCE_ID, "is_probe": True})
                 .fetchone()
             )
-            conn.execute(pending.RESERVE_HOST_INSERT, {"host": HOST})
+            conn.execute(gate.RESERVE_HOST_INSERT, {"host": HOST})
             host = (
                 conn
-                .execute(pending.RESERVE_HOST_LOCK, {"host": HOST})
+                .execute(gate.RESERVE_HOST_LOCK, {"host": HOST})
                 .fetchone()
             )
             after_host_lock()
@@ -807,9 +813,9 @@ def reservation_until_insert(
             if host[7] is not None and host[7] > 0:
                 raise _Rollback
 
-            conn.execute(pending.RESERVE_EXPIRE, {"in_flight_expiry_seconds": 150.0})
+            conn.execute(gate.RESERVE_EXPIRE, {"in_flight_expiry_seconds": 150.0})
             conn.execute(
-                pending.RESERVE_SEND,
+                gate.RESERVE_SEND,
                 {
                     "budget_limit": 3000,
                     "host": HOST,
@@ -862,18 +868,18 @@ def test_result_then_reservation_does_not_deadlock(
     database_url: str,
 ) -> None:
     with conn.transaction():
-        conn.execute(pending.RESULT_HOST_LOCK, {"host": HOST})
+        conn.execute(gate.RESULT_HOST_LOCK, {"host": HOST})
         thread, result = in_thread(database_url, reservation_until_insert)
         wait_for_lock(conn, result["pid"])
-        conn.execute(pending.RESULT_SENT, {"send_id": open_send, "status": 200, "kind": None})
+        conn.execute(gate.RESULT_SENT, {"send_id": open_send, "status": 200, "kind": None})
         conn.execute(
-            pending.RESULT_HOST_UPDATE,
+            gate.RESULT_HOST_UPDATE,
             {
                 "host": HOST,
                 "wait_seconds": 2.0,
                 "failures": 0,
                 "level": 0,
-                "open_until": None,
+                "open_seconds": None,
                 "half_open": False,
                 "throttle": 0,
                 "robots_status": None,
@@ -907,8 +913,8 @@ def test_reservation_then_result_does_not_deadlock(
 
     def result_tx(other: psycopg.Connection) -> str:
         with other.transaction():
-            other.execute(pending.RESULT_HOST_LOCK, {"host": HOST})
-            other.execute(pending.RESULT_SENT, {"send_id": open_send, "status": 200, "kind": None})
+            other.execute(gate.RESULT_HOST_LOCK, {"host": HOST})
+            other.execute(gate.RESULT_SENT, {"send_id": open_send, "status": 200, "kind": None})
 
         return "SENT"
 

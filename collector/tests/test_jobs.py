@@ -14,6 +14,7 @@ from collector.job.job_repository import CancelRequested, JobRepository, Lease, 
 from collector.job.job_service import Failed, Review, Waiting
 from tests.conftest import approve_sources, definition, insert_run
 from tests.support.cli import cli
+from tests.support.loopback_connector import LoopbackConnector
 
 SHORT_LEASE = CrawlPolicy(
     lease=2.0,
@@ -118,7 +119,7 @@ def test_expired_lease_moves_to_next_owner(
     pg: psycopg.Connection,
     tmp_path: Path,
 ) -> None:
-    app = build_app(settings, SHORT_LEASE)
+    app = build_app(settings, LoopbackConnector(9), policy=SHORT_LEASE)
 
     try:
         job_id = submit_job(
@@ -146,7 +147,7 @@ def test_open_fence_blocks_takeover_until_commit(
     pg: psycopg.Connection,
     tmp_path: Path,
 ) -> None:
-    app = build_app(settings, SHORT_LEASE)
+    app = build_app(settings, LoopbackConnector(9), policy=SHORT_LEASE)
 
     try:
         submit_job(
@@ -308,7 +309,7 @@ def test_cancel_requested_running_job_is_cancelled_after_lease_expiry(
     pg: psycopg.Connection,
     tmp_path: Path,
 ) -> None:
-    app = build_app(settings, SHORT_LEASE)
+    app = build_app(settings, LoopbackConnector(9), policy=SHORT_LEASE)
 
     try:
         job_id = submit_job(

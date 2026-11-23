@@ -1,7 +1,11 @@
 """session 컨테이너: PG 17 + Flyway 12.11.0 + S3Mock, 시험마다 collector 표 TRUNCATE"""
 
 import json
+import os
+import sys
 from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import replace
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -14,12 +18,18 @@ from testcontainers.core.network import Network
 from testcontainers.core.wait_strategies import LogMessageWaitStrategy
 
 from collector.app import App, build_app
-from collector.config import Settings
+from collector.config import CrawlPolicy, Settings
+from collector.crawl.transport_gate import Connector, Fetch
+from collector.job.job_service import ClaimedJob
+from collector.registry.registry_repository import RECORD_PROBE
 from collector.registry.source_registry import definition_hash
 from collector.store.object_store import ObjectStore, s3_client
-from tests.support.pending_sql import RECORD_PROBE
+from tests.support.loopback_connector import LoopbackConnector
 
-MIGRATIONS = Path(__file__).resolve().parents[1] / "db" / "migration"
+ROOT = Path(__file__).resolve().parents[1]
+MIGRATIONS = ROOT / "db" / "migration"
+# 오프라인 수집 시험의 모든 시간
+SCALED = CrawlPolicy().scaled(0.02)
 BUCKET = "doclens"
 TABLES = (
     "collector.http_sends",
@@ -108,28 +118,71 @@ def s3_endpoint() -> Iterator[str]:
 
 
 @pytest.fixture
-def settings(database_url: str) -> Settings:
+def settings(
+    database_url: str,
+    s3_endpoint: str,
+) -> Settings:
     with psycopg.connect(database_url, autocommit=True) as conn:
         conn.execute(f"TRUNCATE {', '.join(TABLES)} RESTART IDENTITY CASCADE")
 
     return Settings(
         db_url=database_url,
         contact="test@invalid.example",
-        s3_endpoint="",
-        s3_bucket="",
-        s3_access_key="",
-        s3_secret_key="",
+        s3_endpoint=s3_endpoint,
+        s3_bucket=BUCKET,
+        s3_access_key="local",
+        s3_secret_key="local",
     )
 
 
 @pytest.fixture
 def app(settings: Settings) -> Iterator[App]:
-    app = build_app(settings)
+    """송신하지 않는 시험용, 연결은 닫힌 loopback 포트"""
+
+    app = build_app(settings, LoopbackConnector(9))
 
     try:
         yield app
     finally:
         app.close()
+
+
+@contextmanager
+def connected_app(
+    settings: Settings,
+    connector: Connector,
+    policy: CrawlPolicy = SCALED,
+) -> Iterator[App]:
+    """주어진 connector로 조립한 App, 시험 끝에 pool을 닫음"""
+
+    app = build_app(
+        settings,
+        connector,
+        policy=policy,
+    )
+
+    try:
+        yield app
+    finally:
+        app.close()
+
+
+def subprocess_env(settings: Settings) -> dict[str, str]:
+    """run_collector subprocess의 환경 변수"""
+
+    return {
+        **os.environ,
+        "COLLECTOR_DB_URL": settings.db_url,
+        "COLLECTOR_CONTACT": settings.contact,
+        "DOCLENS_S3_ENDPOINT": settings.s3_endpoint,
+        "DOCLENS_S3_BUCKET": settings.s3_bucket,
+        "DOCLENS_S3_ACCESS_KEY": settings.s3_access_key,
+        "DOCLENS_S3_SECRET_KEY": settings.s3_secret_key,
+    }
+
+
+def run_collector_command(*args: str | int) -> list[str]:
+    return [sys.executable, "-m", "tests.support.run_collector", *(str(arg) for arg in args)]
 
 
 @pytest.fixture
@@ -190,7 +243,7 @@ def record_probe(
     source_id: str,
     version: str,
 ) -> None:
-    """probe 명령 전까지 시험이 probe 통과 증거를 직접 기록"""
+    """loopback probe 없이 probe 통과 증거를 직접 기록"""
 
     with psycopg.connect(settings.db_url, autocommit=True) as conn:
         (definition_hash,) = (
@@ -347,3 +400,37 @@ def insert_run(
         document_ids.append(document_id)
 
     return run_id, batch_id, document_ids
+
+
+def claim(
+    app: App,
+    settings: Settings,
+    directory: Path,
+) -> ClaimedJob:
+    """승인 source 하나로 접수한 job을 claim"""
+
+    approve_sources(
+        app,
+        settings,
+        directory,
+        definition(),
+    )
+    app.jobs.submit(app.registry.draft_request(["spring-boot-4.1.3-reference"]))
+    job = app.jobs.claim(uuid4())
+    assert job is not None
+    return job
+
+
+def page(
+    job: ClaimedJob,
+    name: str,
+    **changes: object,
+) -> Fetch:
+    source = job.sources[0]
+    fetch = Fetch(
+        url=f"https://docs.spring.io/spring-boot/4.1/reference/{name}",
+        purpose="DISCOVERY",
+        source_id=source.source_id,
+        scope=source.scope,
+    )
+    return replace(fetch, **changes)

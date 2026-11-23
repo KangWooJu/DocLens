@@ -157,6 +157,16 @@ class ObjectStore:
         )
 
 
+def raw_key(
+    project: str,
+    exact_version: str,
+    body: bytes,
+) -> str:
+    """원본 내용 hash key"""
+
+    return f"raw/{project}/{exact_version}/{hashlib.sha256(body).hexdigest()}.html"
+
+
 def _check_key(
     key: str,
     hex_digest: str,

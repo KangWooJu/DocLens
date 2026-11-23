@@ -7,9 +7,9 @@ import pytest
 from psycopg.errors import CheckViolation, RestrictViolation, UniqueViolation
 from psycopg.types.json import Jsonb
 
+from collector.crawl.transport_gate import RESERVE_EXPIRE
 from collector.job.job_repository import RECOVER_SENDS, RECOVER_TARGETS
 from tests.conftest import definition, insert_job, insert_run, insert_source
-from tests.support.pending_sql import RESERVE_EXPIRE
 
 RUNNING = """
 UPDATE collector.jobs

@@ -11,6 +11,7 @@ from collector.config import Settings
 from collector.contract.collection_request import CollectionRequest
 from tests.conftest import approve_sources, definition
 from tests.support.cli import cli
+from tests.support.loopback_connector import LoopbackConnector
 
 
 def write(
@@ -134,7 +135,7 @@ def test_concurrent_submits_converge(
     request_body: dict[str, object],
 ) -> None:
     request = CollectionRequest.parse(request_body)
-    apps = [build_app(settings) for _ in range(8)]
+    apps = [build_app(settings, LoopbackConnector(9)) for _ in range(8)]
     barrier = threading.Barrier(len(apps))
     accepts = []
     lock = threading.Lock()
