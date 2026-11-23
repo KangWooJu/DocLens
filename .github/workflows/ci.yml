@@ -73,3 +73,56 @@ jobs:
       - uses: astral-sh/setup-uv@v10.3.3
 
       - run: uv run --no-project --python 3.13 --with jsonschema==4.26.0 python tools/check_contracts.py
+
+  e2e:
+    name: Collected build end to end
+    runs-on: ubuntu-latest
+    # Python crawl of the loopback fixture site, then the pipeline build from its readyRun; no external host
+    needs: [java, collector, contracts]
+    timeout-minutes: 30
+    env:
+      COLLECTOR_DB_URL: postgresql://doclens:doclens@localhost:5432/doclens
+      COLLECTOR_CONTACT: ci@invalid.example
+      DOCLENS_S3_ENDPOINT: http://localhost:9090
+      DOCLENS_S3_BUCKET: doclens
+      DOCLENS_S3_ACCESS_KEY: local
+      DOCLENS_S3_SECRET_KEY: local
+      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/doclens
+      SPRING_DATASOURCE_USERNAME: doclens
+      SPRING_DATASOURCE_PASSWORD: doclens
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - uses: astral-sh/setup-uv@v10.3.3
+
+      - run: docker compose up -d --wait postgres s3mock
+
+      - run: docker compose run --rm collector-migrate
+
+      - name: Offline crawl against the loopback fixture site
+        working-directory: collector
+        shell: bash
+        run: |
+          set -o pipefail
+          uv sync --locked
+          uv run python -m tests.support.e2e_crawl | tail -n 1 > "$RUNNER_TEMP/ready-run.json"
+
+      - name: Pipeline build from the collected run
+        shell: bash
+        env:
+          DOCLENS_OBJECT_ROOT: ${{ runner.temp }}/objects
+        run: |
+          set -o pipefail
+          key=$(jq -r .objectKey "$RUNNER_TEMP/ready-run.json")
+          hash=$(jq -r .contentHash "$RUNNER_TEMP/ready-run.json")
+          size=$(jq -r .sizeBytes "$RUNNER_TEMP/ready-run.json")
+          ./gradlew :pipeline:bootRun --console=plain --args="--spring.main.web-application-type=none --doclens.pipeline.object-store=s3 --doclens.pipeline.ready-run.key=$key --doclens.pipeline.ready-run.hash=$hash --doclens.pipeline.ready-run.size=$size" | tee "$RUNNER_TEMP/build.log"
+          pack=$(grep -o 'packs/[^,]*\.pack' "$RUNNER_TEMP/build.log")
+          curl -sf -o /dev/null -I "$DOCLENS_S3_ENDPOINT/$DOCLENS_S3_BUCKET/$pack"
