@@ -10,8 +10,8 @@ import pytest
 from collector.app import App, build_app
 from collector.config import CrawlPolicy, Settings
 from collector.db import worker_lock
+from collector.job.job_model import Failed, Review, Waiting
 from collector.job.job_repository import CancelRequested, JobRepository, Lease, LeaseLost
-from collector.job.job_service import Failed, Review, Waiting
 from tests.conftest import approve_sources, definition, insert_run
 from tests.support.cli import cli
 from tests.support.loopback_connector import LoopbackConnector

@@ -4,8 +4,13 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from collector.config import CrawlPolicy, Settings
+from collector.crawl.crawl_facade import CrawlFacade
+from collector.crawl.crawl_repository import CrawlRepository
+from collector.crawl.discovery_service import DiscoveryService
+from collector.crawl.fetch_service import FetchService
+from collector.crawl.seal_service import SealService
 from collector.crawl.transport_gate import Connector, TransportGate
-from collector.db import open_pool
+from collector.db import open_pool, worker_lock
 from collector.job.job_facade import JobFacade
 from collector.job.job_repository import JobRepository
 from collector.job.job_service import JobService
@@ -13,6 +18,7 @@ from collector.registry.registry_facade import RegistryFacade
 from collector.registry.registry_repository import RegistryRepository
 from collector.registry.registry_service import RegistryService
 from collector.store.object_store import ObjectStore, s3_client
+from collector.worker import Worker, WorkerLock
 
 
 @dataclass(frozen=True)
@@ -20,6 +26,8 @@ class App:
     registry: RegistryFacade
     jobs: JobFacade
     gate: TransportGate
+    crawl: CrawlFacade
+    worker: Worker
     close: Callable[[], None]
 
 
@@ -28,8 +36,9 @@ def build_app(
     connector: Connector,
     store: ObjectStore | None = None,
     policy: CrawlPolicy | None = None,
+    lock: WorkerLock | None = None,
 ) -> App:
-    """store가 None이면 settings로 만든 S3 저장소"""
+    """store가 None이면 settings로 만든 S3 저장소, lock이 None이면 PG advisory lock"""
 
     policy = policy or CrawlPolicy()
     store = store or ObjectStore(
@@ -48,6 +57,38 @@ def build_app(
         settings.contact,
     )
     registry_repository = RegistryRepository()
+    job_repository = JobRepository()
+    crawl_repository = CrawlRepository()
+    jobs = JobFacade(
+        pool,
+        JobService(
+            job_repository,
+            registry_repository,
+            policy,
+        ),
+    )
+    crawl = CrawlFacade(
+        pool,
+        DiscoveryService(
+            gate,
+            crawl_repository,
+            policy,
+        ),
+        FetchService(
+            gate,
+            store,
+            crawl_repository,
+            job_repository,
+            policy,
+        ),
+        SealService(
+            store,
+            crawl_repository,
+            job_repository,
+        ),
+        job_repository,
+        policy,
+    )
     return App(
         registry=RegistryFacade(
             pool,
@@ -57,14 +98,14 @@ def build_app(
                 store,
             ),
         ),
-        jobs=JobFacade(
-            pool,
-            JobService(
-                JobRepository(),
-                registry_repository,
-                policy,
-            ),
-        ),
+        jobs=jobs,
         gate=gate,
+        crawl=crawl,
+        worker=Worker(
+            jobs,
+            crawl,
+            policy,
+            lock or (lambda: worker_lock(settings, policy)),
+        ),
         close=pool.close,
     )

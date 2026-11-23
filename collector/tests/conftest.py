@@ -20,7 +20,7 @@ from testcontainers.core.wait_strategies import LogMessageWaitStrategy
 from collector.app import App, build_app
 from collector.config import CrawlPolicy, Settings
 from collector.crawl.transport_gate import Connector, Fetch
-from collector.job.job_service import ClaimedJob
+from collector.job.job_model import ClaimedJob
 from collector.registry.registry_repository import RECORD_PROBE
 from collector.registry.source_registry import definition_hash
 from collector.store.object_store import ObjectStore, s3_client

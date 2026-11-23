@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal
 from uuid import UUID, uuid4
 
 from collector.config import CrawlPolicy
@@ -10,48 +9,11 @@ from collector.contract.canonical_json import JsonValue, canonical_bytes, conten
 from collector.contract.collection_request import CollectionRequest
 from collector.db import Conn
 from collector.errors import RequestRejected
+from collector.job.job_model import Cancelled, ClaimedJob, Failed, JobOutcome, Review, Waiting
 from collector.job.job_repository import JobRepository, Lease, StatusRow
 from collector.registry.registry_repository import RegistryRepository
-from collector.registry.source_registry import Source, match_inputs, registry_hash
+from collector.registry.source_registry import match_inputs, registry_hash
 from collector.store.object_store import ObjectRef
-
-type WaitReason = Literal["BUDGET", "HOST", "RETRY", "SHUTDOWN"]
-
-
-@dataclass(frozen=True)
-class ClaimedJob:
-    lease: Lease
-    request: CollectionRequest
-    sources: tuple[Source, ...]
-
-
-@dataclass(frozen=True)
-class Succeeded:
-    result: ObjectRef
-
-
-@dataclass(frozen=True)
-class Waiting:
-    reason: WaitReason
-    delay_seconds: float | None
-
-
-@dataclass(frozen=True)
-class Review:
-    code: str
-
-
-@dataclass(frozen=True)
-class Failed:
-    code: str
-
-
-@dataclass(frozen=True)
-class Cancelled:
-    pass
-
-
-type JobOutcome = Succeeded | Waiting | Review | Failed | Cancelled
 
 
 @dataclass(frozen=True)
@@ -300,6 +262,9 @@ class JobService:
             request=request,
             sources=tuple(row.source for row in rows),
         )
+
+    def next_due(self, conn: Conn) -> tuple[int, float | None]:
+        return self._repository.next_due(conn)
 
     def heartbeat(
         self,
