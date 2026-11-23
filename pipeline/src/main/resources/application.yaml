@@ -25,5 +25,14 @@ management:
 
 doclens:
   pipeline:
-    # Local object root: raw/ sources and packs/ output (an S3 bucket from step E on)
+    # Local object root: raw/ sources and packs/ output in local mode, the pack working directory in s3 mode
     object-root: ${DOCLENS_OBJECT_ROOT:./data}
+    # Object store for raw/ reads and packs/ uploads: local (object-root) or s3
+    object-store: ${DOCLENS_OBJECT_STORE:local}
+    # S3 compatible store, used only when object-store is s3 (defaults match the local S3Mock)
+    s3:
+      endpoint: ${DOCLENS_S3_ENDPOINT:http://localhost:9090}
+      bucket: ${DOCLENS_S3_BUCKET:doclens}
+      region: ${DOCLENS_S3_REGION:us-east-1}
+      access-key: ${DOCLENS_S3_ACCESS_KEY:local}
+      secret-key: ${DOCLENS_S3_SECRET_KEY:local}
