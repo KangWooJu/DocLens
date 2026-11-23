@@ -171,15 +171,54 @@ def check_id_vectors() -> int:
     return len(vectors)
 
 
+URL_VECTOR_KEYS = {"name", "base", "href", "canonical", "javaTarget"}
+# Canonical paths keep only these ASCII characters; percent escapes use uppercase hex.
+CANONICAL_PATH = re.compile(r"(?:[A-Za-z0-9\-._~!$&'()*+,;=:@/]|%[0-9A-F]{2})*")
+
+
+def check_url_vectors() -> int:
+    document = load_json(CONTRACTS / "url-canonical-vectors.json")
+    hosts = document["scope"]["allowedHosts"]
+    prefixes = document["scope"]["allowedPathPrefixes"]
+    vectors = document["vectors"]
+    names = [vector["name"] for vector in vectors]
+
+    if not hosts or not prefixes or len(names) != len(set(names)):
+        raise SystemExit("url vectors need a scope and unique names")
+
+    for vector in vectors:
+        if set(vector) != URL_VECTOR_KEYS:
+            raise SystemExit(f"url vector {vector.get('name')}: keys must be {sorted(URL_VECTOR_KEYS)}")
+
+        canonical = vector["canonical"]
+
+        if canonical is not None:
+            match = re.fullmatch(r"https://([a-z0-9.-]+)(/.*)", canonical)
+
+            if (
+                match is None
+                or match.group(1) not in hosts
+                or not any(match.group(2).startswith(prefix) for prefix in prefixes)
+                or CANONICAL_PATH.fullmatch(match.group(2)) is None
+            ):
+                raise SystemExit(f"url vector {vector['name']}: canonical is outside the scope or not normalized")
+
+        if vector["javaTarget"] is not None and "#" in vector["javaTarget"]:
+            raise SystemExit(f"url vector {vector['name']}: javaTarget keeps a fragment")
+
+    return len(vectors)
+
+
 def main() -> None:
     schemas = load_schemas()
     examples = check_examples(schemas)
     canonical = check_canonical_vectors()
     ids = check_id_vectors()
+    urls = check_url_vectors()
 
     print(
         f"contracts ok: {len(schemas)} schemas, {examples} examples, "
-        f"{canonical} canonical vectors, {ids} id vectors"
+        f"{canonical} canonical vectors, {ids} id vectors, {urls} url vectors"
     )
 
 

@@ -13,6 +13,7 @@ Language-neutral contracts shared by the Python collector and the Java modules. 
 | `examples/root100/`, `examples/empty-optional/` | Multi-file fixtures for collection reconciliation tests |
 | `canonical-golden-vectors.json` | Canonical JSON bytes and hashes every implementation must reproduce |
 | `id-golden-vectors.json` | Length-prefixed ID encoding and hashes every implementation must reproduce |
+| `url-canonical-vectors.json` | Link resolution per vector: `canonical` is the collector URL rule (null = not a target in the scope), `javaTarget` is the current pipeline link target; differing pairs are known differences |
 
 ## Rules
 

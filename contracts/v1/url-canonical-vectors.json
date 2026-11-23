@@ -1,0 +1,236 @@
+{
+  "scope": {
+    "allowedHosts": [
+      "docs.spring.io"
+    ],
+    "allowedPathPrefixes": [
+      "/spring-boot/4.1/reference/"
+    ]
+  },
+  "vectors": [
+    {
+      "name": "relative-sibling",
+      "base": "https://docs.spring.io/spring-boot/4.1/reference/index.html",
+      "href": "p001.html",
+      "canonical": "https://docs.spring.io/spring-boot/4.1/reference/p001.html",
+      "javaTarget": "https://docs.spring.io/spring-boot/4.1/reference/p001.html"
+    },
+    {
+      "name": "relative-directory",
+      "base": "https://docs.spring.io/spring-boot/4.1/reference/index.html",
+      "href": "features/logging.html",
+      "canonical": "https://docs.spring.io/spring-boot/4.1/reference/features/logging.html",
+      "javaTarget": "https://docs.spring.io/spring-boot/4.1/reference/features/logging.html"
+    },
+    {
+      "name": "parent-segment",
+      "base": "https://docs.spring.io/spring-boot/4.1/reference/features/index.html",
+      "href": "../web/servlet.html",
+      "canonical": "https://docs.spring.io/spring-boot/4.1/reference/web/servlet.html",
+      "javaTarget": "https://docs.spring.io/spring-boot/4.1/reference/web/servlet.html"
+    },
+    {
+      "name": "dot-segments",
+      "base": "https://docs.spring.io/spring-boot/4.1/reference/index.html",
+      "href": "./features/./logging.html",
+      "canonical": "https://docs.spring.io/spring-boot/4.1/reference/features/logging.html",
+      "javaTarget": "https://docs.spring.io/spring-boot/4.1/reference/features/logging.html"
+    },
+    {
+      "name": "fragment-dropped",
+      "base": "https://docs.spring.io/spring-boot/4.1/reference/index.html",
+      "href": "features/logging.html#logging.file-output",
+      "canonical": "https://docs.spring.io/spring-boot/4.1/reference/features/logging.html",
+      "javaTarget": "https://docs.spring.io/spring-boot/4.1/reference/features/logging.html"
+    },
+    {
+      "name": "fragment-only",
+      "base": "https://docs.spring.io/spring-boot/4.1/reference/features/index.html",
+      "href": "#overview",
+      "canonical": "https://docs.spring.io/spring-boot/4.1/reference/features/index.html",
+      "javaTarget": "https://docs.spring.io/spring-boot/4.1/reference/features/index.html"
+    },
+    {
+      "name": "empty-href",
+      "base": "https://docs.spring.io/spring-boot/4.1/reference/features/index.html",
+      "href": "",
+      "canonical": "https://docs.spring.io/spring-boot/4.1/reference/features/index.html",
+      "javaTarget": "https://docs.spring.io/spring-boot/4.1/reference/features/"
+    },
+    {
+      "name": "absolute-https",
+      "base": "https://docs.spring.io/spring-boot/4.1/reference/features/index.html",
+      "href": "https://docs.spring.io/spring-boot/4.1/reference/web/index.html",
+      "canonical": "https://docs.spring.io/spring-boot/4.1/reference/web/index.html",
+      "javaTarget": "https://docs.spring.io/spring-boot/4.1/reference/web/index.html"
+    },
+    {
+      "name": "root-relative",
+      "base": "https://docs.spring.io/spring-boot/4.1/reference/features/index.html",
+      "href": "/spring-boot/4.1/reference/web/index.html",
+      "canonical": "https://docs.spring.io/spring-boot/4.1/reference/web/index.html",
+      "javaTarget": "https://docs.spring.io/spring-boot/4.1/reference/web/index.html"
+    },
+    {
+      "name": "http-approved-host",
+      "base": "https://docs.spring.io/spring-boot/4.1/reference/index.html",
+      "href": "http://docs.spring.io/spring-boot/4.1/reference/web/index.html",
+      "canonical": "https://docs.spring.io/spring-boot/4.1/reference/web/index.html",
+      "javaTarget": "http://docs.spring.io/spring-boot/4.1/reference/web/index.html"
+    },
+    {
+      "name": "uppercase-host",
+      "base": "https://docs.spring.io/spring-boot/4.1/reference/index.html",
+      "href": "https://DOCS.Spring.IO/spring-boot/4.1/reference/web/index.html",
+      "canonical": "https://docs.spring.io/spring-boot/4.1/reference/web/index.html",
+      "javaTarget": "https://DOCS.Spring.IO/spring-boot/4.1/reference/web/index.html"
+    },
+    {
+      "name": "default-port",
+      "base": "https://docs.spring.io/spring-boot/4.1/reference/index.html",
+      "href": "https://docs.spring.io:443/spring-boot/4.1/reference/web/index.html",
+      "canonical": "https://docs.spring.io/spring-boot/4.1/reference/web/index.html",
+      "javaTarget": "https://docs.spring.io:443/spring-boot/4.1/reference/web/index.html"
+    },
+    {
+      "name": "other-port",
+      "base": "https://docs.spring.io/spring-boot/4.1/reference/index.html",
+      "href": "https://docs.spring.io:8443/spring-boot/4.1/reference/web/index.html",
+      "canonical": null,
+      "javaTarget": "https://docs.spring.io:8443/spring-boot/4.1/reference/web/index.html"
+    },
+    {
+      "name": "userinfo",
+      "base": "https://docs.spring.io/spring-boot/4.1/reference/index.html",
+      "href": "https://user@docs.spring.io/spring-boot/4.1/reference/web/index.html",
+      "canonical": null,
+      "javaTarget": "https://user@docs.spring.io/spring-boot/4.1/reference/web/index.html"
+    },
+    {
+      "name": "trailing-dot-host",
+      "base": "https://docs.spring.io/spring-boot/4.1/reference/index.html",
+      "href": "https://docs.spring.io./spring-boot/4.1/reference/web/index.html",
+      "canonical": null,
+      "javaTarget": "https://docs.spring.io./spring-boot/4.1/reference/web/index.html"
+    },
+    {
+      "name": "query",
+      "base": "https://docs.spring.io/spring-boot/4.1/reference/index.html",
+      "href": "web/index.html?lang=en",
+      "canonical": null,
+      "javaTarget": "https://docs.spring.io/spring-boot/4.1/reference/web/index.html?lang=en"
+    },
+    {
+      "name": "other-host",
+      "base": "https://docs.spring.io/spring-boot/4.1/reference/index.html",
+      "href": "https://github.com/spring-projects/spring-boot",
+      "canonical": null,
+      "javaTarget": "https://github.com/spring-projects/spring-boot"
+    },
+    {
+      "name": "unversioned-path",
+      "base": "https://docs.spring.io/spring-boot/4.1/reference/index.html",
+      "href": "/spring-boot/reference/web/index.html",
+      "canonical": null,
+      "javaTarget": "https://docs.spring.io/spring-boot/reference/web/index.html"
+    },
+    {
+      "name": "other-version-path",
+      "base": "https://docs.spring.io/spring-boot/4.1/reference/index.html",
+      "href": "/spring-boot/4.1.3/api/java/index.html",
+      "canonical": null,
+      "javaTarget": "https://docs.spring.io/spring-boot/4.1.3/api/java/index.html"
+    },
+    {
+      "name": "other-project",
+      "base": "https://docs.spring.io/spring-boot/4.1/reference/index.html",
+      "href": "https://docs.spring.io/spring-framework/reference/index.html",
+      "canonical": null,
+      "javaTarget": "https://docs.spring.io/spring-framework/reference/index.html"
+    },
+    {
+      "name": "mailto",
+      "base": "https://docs.spring.io/spring-boot/4.1/reference/index.html",
+      "href": "mailto:team@example.invalid",
+      "canonical": null,
+      "javaTarget": null
+    },
+    {
+      "name": "percent-hex-uppercase",
+      "base": "https://docs.spring.io/spring-boot/4.1/reference/index.html",
+      "href": "caf%c3%a9.html",
+      "canonical": "https://docs.spring.io/spring-boot/4.1/reference/caf%C3%A9.html",
+      "javaTarget": "https://docs.spring.io/spring-boot/4.1/reference/caf%c3%a9.html"
+    },
+    {
+      "name": "percent-unreserved-decoded",
+      "base": "https://docs.spring.io/spring-boot/4.1/reference/index.html",
+      "href": "%7Euser%2Dguide.html",
+      "canonical": "https://docs.spring.io/spring-boot/4.1/reference/~user-guide.html",
+      "javaTarget": "https://docs.spring.io/spring-boot/4.1/reference/%7Euser%2Dguide.html"
+    },
+    {
+      "name": "percent-reserved-kept",
+      "base": "https://docs.spring.io/spring-boot/4.1/reference/index.html",
+      "href": "a%2Fb.html",
+      "canonical": "https://docs.spring.io/spring-boot/4.1/reference/a%2Fb.html",
+      "javaTarget": "https://docs.spring.io/spring-boot/4.1/reference/a%2Fb.html"
+    },
+    {
+      "name": "non-ascii-encoded",
+      "base": "https://docs.spring.io/spring-boot/4.1/reference/index.html",
+      "href": "café.html",
+      "canonical": "https://docs.spring.io/spring-boot/4.1/reference/caf%C3%A9.html",
+      "javaTarget": "https://docs.spring.io/spring-boot/4.1/reference/café.html"
+    },
+    {
+      "name": "non-ascii-nfc",
+      "base": "https://docs.spring.io/spring-boot/4.1/reference/index.html",
+      "href": "café.html",
+      "canonical": "https://docs.spring.io/spring-boot/4.1/reference/caf%C3%A9.html",
+      "javaTarget": "https://docs.spring.io/spring-boot/4.1/reference/café.html"
+    },
+    {
+      "name": "space-encoded",
+      "base": "https://docs.spring.io/spring-boot/4.1/reference/index.html",
+      "href": "my page.html",
+      "canonical": "https://docs.spring.io/spring-boot/4.1/reference/my%20page.html",
+      "javaTarget": null
+    },
+    {
+      "name": "trailing-slash-kept",
+      "base": "https://docs.spring.io/spring-boot/4.1/reference/index.html",
+      "href": "web/",
+      "canonical": "https://docs.spring.io/spring-boot/4.1/reference/web/",
+      "javaTarget": "https://docs.spring.io/spring-boot/4.1/reference/web/"
+    },
+    {
+      "name": "double-slash-relative-joined",
+      "base": "https://docs.spring.io/spring-boot/4.1/reference/index.html",
+      "href": "web//servlet.html",
+      "canonical": "https://docs.spring.io/spring-boot/4.1/reference/web/servlet.html",
+      "javaTarget": "https://docs.spring.io/spring-boot/4.1/reference/web/servlet.html"
+    },
+    {
+      "name": "double-slash-absolute-kept",
+      "base": "https://docs.spring.io/spring-boot/4.1/reference/index.html",
+      "href": "https://docs.spring.io/spring-boot/4.1/reference/web//servlet.html",
+      "canonical": "https://docs.spring.io/spring-boot/4.1/reference/web//servlet.html",
+      "javaTarget": "https://docs.spring.io/spring-boot/4.1/reference/web//servlet.html"
+    },
+    {
+      "name": "index-kept",
+      "base": "https://docs.spring.io/spring-boot/4.1/reference/index.html",
+      "href": "web/index.html",
+      "canonical": "https://docs.spring.io/spring-boot/4.1/reference/web/index.html",
+      "javaTarget": "https://docs.spring.io/spring-boot/4.1/reference/web/index.html"
+    },
+    {
+      "name": "case-kept",
+      "base": "https://docs.spring.io/spring-boot/4.1/reference/index.html",
+      "href": "Web/Index.html",
+      "canonical": "https://docs.spring.io/spring-boot/4.1/reference/Web/Index.html",
+      "javaTarget": "https://docs.spring.io/spring-boot/4.1/reference/Web/Index.html"
+    }
+  ]
+}
