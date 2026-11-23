@@ -32,6 +32,7 @@ Language-neutral contracts shared by the Python collector and the Java modules. 
 | includeExcludePolicyHash (Python) | `include-exclude-v1`, sorted allowedPathPrefixes, `exclude`, sorted excludePathPrefixes |
 | scopeHash (Python) | `scope-v1`, input count, then for each input sorted by (sourceId, project, exactVersion, sourceType, documentType): sourceId, project, exactVersion, sourceType, documentType, `true` or `false` for required, applicability, discoveryRuleId, canonicalRoot, includeExcludePolicyHash |
 | inputScopeKey (Python) | the scopeHash fields over the inputs of one (project, exactVersion, applicability) projection |
+| runInputSnapshotHash (Java) | `input-snapshot-v1`, discovery contentHash, envelope count, then per batch sorted by batchId: batchId, envelope contentHash; document count, then per outcome sorted by documentId: documentId, raw contentHash or `none`, versionEvidence canonical JSON hash |
 | headingLocator | `heading-locator-v1`, `html-id`, NFC element id, occurrence; or `heading-locator-v1`, `ordinal`, path length, sibling ordinals |
 | tabGroupLocator | `tabgroup-locator-v1`, `html-id`, NFC element id, occurrence; or `tabgroup-locator-v1`, `ordinal`, `1`, group ordinal; `none` without tabs |
 | variantKey | the label itself for mapped `java`, `kotlin`, `groovy`, `maven`, `gradle`, `properties`, `yaml` at occurrence 0; otherwise the 64 hex digits of `variant-label-v1`, label, occurrence |
