@@ -1,5 +1,6 @@
 package io.github.kangwooju.doclens.pipeline.pack.facade;
 
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.stereotype.Component;
@@ -7,6 +8,8 @@ import org.springframework.stereotype.Component;
 import io.github.kangwooju.doclens.core.pack.dto.PackDocument;
 import io.github.kangwooju.doclens.core.pack.writer.PackWriter;
 import io.github.kangwooju.doclens.pipeline.chunk.service.ChunkService;
+import io.github.kangwooju.doclens.pipeline.collected.dto.ObjectRef;
+import io.github.kangwooju.doclens.pipeline.collected.service.CollectedRunService;
 import io.github.kangwooju.doclens.pipeline.global.transaction.TransactionExecutor;
 import io.github.kangwooju.doclens.pipeline.pack.dto.ArtifactRow;
 import io.github.kangwooju.doclens.pipeline.pack.dto.BuildRequest;
@@ -43,6 +46,7 @@ public class PackBuildFacade {
     private final DocumentParseService documentParseService;
     private final ChunkService chunkService;
     private final TransactionExecutor transactionExecutor;
+    private final CollectedRunService collectedRunService;
 
     /** ingest 뒤 봉인됐거나 이미 성공한 Build면 export까지, 같은 요청 재전송은 재개 */
     public BuildResult build(BuildRequest request) {
@@ -57,6 +61,26 @@ public class PackBuildFacade {
         }
 
         return ingested;
+    }
+
+    /** collector readyRun 하나의 projection마다 build, 필수 문서 실패가 있으면 Build 없이 CollectedRunIncompleteException */
+    public List<BuildResult> buildCollected(ObjectRef readyRun) {
+
+        ProcessingConfig config = processingConfigService
+                .current(
+                        DocumentParseService.PARSER_POLICY_VERSION,
+                        ChunkService.CHUNKER_POLICY_VERSION
+                );
+
+        return collectedRunService
+                .requests(
+                        readyRun,
+                        config
+                                .hash()
+                )
+                .stream()
+                .map(this::build)
+                .toList();
     }
 
     /**

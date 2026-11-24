@@ -58,6 +58,7 @@ class ArchitectureTests {
         List<String[]> layers = List
                 .of(
                         new String[] {"..controller..", "Controller"},
+                        new String[] {"..runner..", "Runner"},
                         new String[] {"..facade..", "Facade"},
                         new String[] {"..service..", "Service"},
                         new String[] {"..policy..", "Policy"},
@@ -90,6 +91,26 @@ class ArchitectureTests {
                 .onlyDependOnClassesThat()
                 .resideInAnyPackage(
                         "..controller..",
+                        "..facade..",
+                        "..dto..",
+                        BASE + ".global..",
+                        "java..",
+                        "org.springframework..",
+                        "lombok.."
+                ));
+    }
+
+    @Test
+    @DisplayName("A1 Runner 진입부는 Facade, DTO, 공통, 프레임워크에만 의존")
+    void runnerEntryPointsDependOnFacadeOnly() {
+
+        check(classes()
+                .that()
+                .resideInAPackage("..runner..")
+                .should()
+                .onlyDependOnClassesThat()
+                .resideInAnyPackage(
+                        "..runner..",
                         "..facade..",
                         "..dto..",
                         BASE + ".global..",
