@@ -29,6 +29,7 @@ from collector.crawl.urls import canonical_url
 from collector.db import Conn
 from collector.job.job_model import ClaimedJob, Waiting
 from collector.job.job_repository import JobRepository, Lease
+from collector.registry.source_registry import GIT_RULES
 from collector.store.object_store import ObjectRef, ObjectStore, raw_key
 
 
@@ -270,9 +271,13 @@ class FetchService:
         target: DueTarget,
         markers: PageMarkers,
     ) -> None:
-        """페이지 nav가 봉인 목록 밖 링크를 가지거나 버전 표지가 다르면 drift"""
+        """페이지 nav가 봉인 목록 밖 링크를 가지거나 버전 표지가 다르면 drift, commit 고정 경로 목록은 검사 없음"""
 
         source = job.source(target.source_id)
+
+        if source.discovery_rule_id in GIT_RULES:
+            return
+
         links = {
             canonical_url(
                 target.url,

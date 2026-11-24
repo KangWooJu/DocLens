@@ -1,4 +1,4 @@
-"""합성 Antora 사이트를 메모리에서 생성, 실제 문서 페이지는 쓰지 않음"""
+"""합성 Antora 사이트와 합성 git 트리를 메모리에서 생성, 실제 문서 원본은 쓰지 않음"""
 
 PAGE = """<!DOCTYPE html>
 <html lang="en">
@@ -67,3 +67,50 @@ def site(
         for name in names
     }
     return {"/robots.txt": robots.encode("utf-8"), **pages_by_path}
+
+
+GIT_PAGE = """= Synthetic {title}
+
+[[overview]]
+== Overview
+
+This synthetic page {title} is written by the test fixture and is not a real document.
+
+include-code::MyApplication[]
+"""
+# 합성 git 트리의 저장소 경로, 쪽과 include
+GIT_PAGES = (
+    "docs/antora/pages/index.adoc",
+    "docs/antora/pages/web/servlet.adoc",
+    "docs/antora/pages/data/sql.adoc",
+)
+GIT_INCLUDES = (
+    "docs/src/main/java/example/MyApplication.java",
+    "docs/src/main/kotlin/example/MyApplication.kt",
+    "docs/antora/partials/dockerfile",
+)
+# 목록에 없는 파일, 송신되면 안 됨
+GIT_UNLISTED = "docs/antora/pages/unlisted.adoc"
+
+
+def git_base(commit: str) -> str:
+    return f"/spring-projects/spring-boot/{commit}/"
+
+
+def git_tree(
+    commit: str,
+    version: str = "4.1.2",
+) -> dict[str, bytes]:
+    """path별 raw 본문, robots.txt 없음(raw host처럼 404)"""
+
+    files = {
+        "gradle.properties": f"# synthetic build properties\nversion={version}\nlatestVersion=false\n",
+        **{
+            path: GIT_PAGE.format(title=path.rsplit("/", 1)[-1].removesuffix(".adoc"))
+            for path in (*GIT_PAGES, GIT_UNLISTED)
+        },
+        GIT_INCLUDES[0]: "package example;\n\n// tag::main[]\npublic class MyApplication {\n}\n// end::main[]\n",
+        GIT_INCLUDES[1]: "package example\n\n// tag::main[]\nclass MyApplication\n// end::main[]\n",
+        GIT_INCLUDES[2]: "FROM synthetic-base\nCOPY app.jar /app.jar\n",
+    }
+    return {git_base(commit) + path: body.encode("utf-8") for path, body in files.items()}

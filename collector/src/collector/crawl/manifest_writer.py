@@ -10,7 +10,7 @@ from collector.contract.canonical_json import JsonValue, canonical_bytes, utc_te
 from collector.contract.collection_request import RequestInput
 from collector.crawl.crawl_repository import BatchRow, ProjectionRow, RunRow, TargetRow
 from collector.job.job_model import ClaimedJob
-from collector.registry.source_registry import EXACT_VERSION
+from collector.registry.source_registry import EXACT_VERSION, GIT_BLOB, git_commit
 from collector.store.object_store import ObjectRef
 
 # 응답 없이 실패한 문서의 versionEvidence contentHash
@@ -132,7 +132,7 @@ def discovery_json(
             "state": "SEALED",
             "startedAt": utc_text(run.started_at),
             "sealedAt": utc_text(run.sealed_at),
-            "discoveryMethod": "NAV_CLOSED",
+            "discoveryMethod": "EXPLICIT_ARTIFACT_LIST" if _git_blob(context) else "NAV_CLOSED",
             "requiredInputs": [item.to_json() for item in context.inputs if item.required],
             "optionalInputs": [item.to_json() for item in context.inputs if not item.required],
             "targetCount": sum(batch.target_count for batch in batches),
@@ -242,17 +242,19 @@ def _outcome(
     run: RunRow,
     row: TargetRow,
 ) -> dict[str, JsonValue]:
+    item = context.input_of(row.source_id)
+    pinned = item.source_type == GIT_BLOB
     common: dict[str, JsonValue] = {
         "schemaVersion": 1,
         "eventType": "DocumentCollected",
         "runId": str(run.run_id),
         "batchId": str(row.batch_id),
         "documentId": row.document_id,
-        "input": _input(context, row),
+        "input": item.to_json(),
         "url": row.url,
         "traceId": context.trace_id,
         "attemptCount": row.attempt_count,
-        "sourceCommit": None,
+        "sourceCommit": git_commit(row.url) if pinned else None,
         "snapshotId": str(run.snapshot_id),
     }
     rule = context.version_rule(row.source_id)
@@ -261,14 +263,15 @@ def _outcome(
         raw = _required(row.raw)
         assert row.observed_at is not None
         observed_at = utc_text(row.observed_at)
+        # commit 고정 URL은 입력 exactVersion, 같은 run의 entry 관문이 그 값을 확인함
         return {
             **common,
             "finalUrl": row.final_url,
             "observedAt": observed_at,
             "versionEvidence": {
                 "level": "UNVERIFIED",
-                "method": "PAGE_MARKER",
-                "exactVersion": evidence_version(row.observed_version),
+                "method": "VERSION_PINNED_URL" if pinned else "PAGE_MARKER",
+                "exactVersion": item.exact_version if pinned else evidence_version(row.observed_version),
                 "sourceUrl": row.url,
                 "observedAt": observed_at,
                 "contentHash": raw.content_hash,
@@ -305,6 +308,12 @@ def _outcome(
         "needsReview": row.needs_review,
         "httpStatus": row.http_status,
     }
+
+
+def _git_blob(context: RunInputs) -> bool:
+    """git-blob job은 모든 input이 git-blob"""
+
+    return any(item.source_type == GIT_BLOB for item in context.inputs)
 
 
 def _input(
