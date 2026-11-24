@@ -322,6 +322,21 @@ class ArchitectureTests {
     }
 
     @Test
+    @DisplayName("AsciidoctorJ와 JRuby 타입은 parse helper 패키지 안에서만 사용")
+    void asciidocLibrariesStayInParseHelper() {
+
+        check(noClasses()
+                .that()
+                .resideOutsideOfPackage("..parse.helper..")
+                .should()
+                .dependOnClassesThat()
+                .resideInAnyPackage(
+                        "org.asciidoctor..",
+                        "org.jruby.."
+                ));
+    }
+
+    @Test
     @DisplayName("A9 enum은 type 패키지에만 위치")
     void enumsLiveInTypePackage() {
 

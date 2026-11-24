@@ -1,0 +1,7 @@
+[[broken]]
+= Broken Residue
+
+[[broken.body]]
+== Body
+
+Text with foo::bar[] inside and {undefined-attr} left over.

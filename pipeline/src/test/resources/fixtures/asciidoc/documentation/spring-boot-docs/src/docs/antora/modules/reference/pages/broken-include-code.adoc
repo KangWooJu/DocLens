@@ -1,0 +1,7 @@
+[[broken]]
+= Broken Include Code
+
+[[sample.code]]
+== Code
+
+include-code::Missing[]

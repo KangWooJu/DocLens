@@ -13,6 +13,7 @@ import io.github.kangwooju.doclens.pipeline.chunk.helper.BlockRenderHelper;
 import io.github.kangwooju.doclens.pipeline.chunk.helper.ChunkPackHelper;
 import io.github.kangwooju.doclens.pipeline.chunk.helper.IdentifierHelper;
 import io.github.kangwooju.doclens.pipeline.parse.dto.StructuredDocument;
+import io.github.kangwooju.doclens.pipeline.parse.helper.AsciidocHtmlHelper;
 import io.github.kangwooju.doclens.pipeline.parse.policy.ParserProfilePolicy;
 import io.github.kangwooju.doclens.pipeline.parse.store.ParserProfileStore;
 import lombok.RequiredArgsConstructor;
@@ -28,7 +29,7 @@ public class ProcessingConfigService {
     private final ParserProfileStore parserProfileStore;
     private final ProcessingConfigPolicy processingConfigPolicy;
 
-    /** 실제 상수, 등록 프로필, jsoup 버전으로 만든 처리 설정 */
+    /** 실제 상수, 등록 프로필, jsoup과 AsciidoctorJ, JRuby 버전으로 만든 처리 설정 */
     public ProcessingConfig current(
             String parserPolicyVersion,
             String chunkerPolicyVersion
@@ -78,6 +79,10 @@ public class ProcessingConfigService {
                 parserPolicyVersion,
                 chunkerPolicyVersion,
                 jsoupVersion(),
+                AsciidocHtmlHelper
+                        .asciidoctorjVersion(),
+                AsciidocHtmlHelper
+                        .jrubyVersion(),
                 StructuredDocument.SCHEMA_VERSION,
                 ParserProfilePolicy.MAX_CODE_BYTES,
                 ChunkPackHelper.TARGET_BYTES,

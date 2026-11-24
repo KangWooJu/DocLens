@@ -1,0 +1,7 @@
+[[deep]]
+= Deep Page
+
+[[deep.intro]]
+== Introduction
+
+The deep page links back to xref:sample.adoc#sample.code[the sample code].

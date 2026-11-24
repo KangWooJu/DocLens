@@ -1,0 +1,7 @@
+[[broken]]
+= Broken Include
+
+[[broken.body]]
+== Body
+
+include::reference:partial$absent.adoc[]
