@@ -255,3 +255,77 @@ def test_rows_outside_the_contract_are_rejected_at_generation() -> None:
             RUN,
             (broken,),
         )
+
+
+COMMIT = "0123456789abcdef0123456789abcdef01234567"
+RAW_ROOT = f"https://raw.githubusercontent.com/spring-projects/spring-boot/{COMMIT}/"
+GIT_CONTEXT = writer.RunInputs(
+    job_id=CONTEXT.job_id,
+    trace_id=CONTEXT.trace_id,
+    inputs=(
+        RequestInput(
+            source_id="spring-boot-4.1.2-reference",
+            project="spring-boot",
+            exact_version="4.1.2",
+            source_type="git-blob",
+            document_type="REFERENCE",
+            required=True,
+            applicability="EXACT_RELEASE",
+        ),
+    ),
+    version_rules=(("spring-boot-4.1.2-reference", "gradle-properties-version-v1"),),
+)
+# 쪽 원본에는 버전 표지가 없음
+GIT_SUCCEEDED = replace(
+    SUCCEEDED,
+    source_id="spring-boot-4.1.2-reference",
+    url=RAW_ROOT + "docs/pages/index.adoc",
+    final_url=RAW_ROOT + "docs/pages/index.adoc",
+    raw=ref("raw/spring-boot/4.1.2/" + "6" * 64 + ".txt", "6"),
+    content_type="text/plain",
+    observed_version=None,
+)
+GIT_FAILED = replace(
+    UNANSWERED,
+    source_id="spring-boot-4.1.2-reference",
+    url=RAW_ROOT + "docs/pages/missing.adoc",
+)
+
+
+def test_git_blob_outcomes_pin_the_commit_and_the_input_version() -> None:
+    success, failed = lines(
+        writer.outcomes_jsonl(
+            GIT_CONTEXT,
+            RUN,
+            (GIT_SUCCEEDED, GIT_FAILED),
+        ),
+    )
+
+    assert success["sourceCommit"] == failed["sourceCommit"] == COMMIT
+    assert success["contentType"] == "text/plain"
+    assert success["versionEvidence"] == {
+        "level": "UNVERIFIED",
+        "method": "VERSION_PINNED_URL",
+        "exactVersion": "4.1.2",
+        "sourceUrl": GIT_SUCCEEDED.url,
+        "observedAt": "2026-11-24T01:02:03Z",
+        "contentHash": GIT_SUCCEEDED.raw.content_hash,
+        "selectorRuleId": "gradle-properties-version-v1",
+    }
+    assert failed["versionEvidence"]["method"] == "OBSERVATION_ONLY"
+    assert failed["versionEvidence"]["exactVersion"] is None
+
+
+def test_git_blob_discovery_is_an_explicit_list_at_the_commit() -> None:
+    discovery = json.loads(
+        writer.discovery_json(
+            GIT_CONTEXT,
+            replace(RUN, official_revision=COMMIT),
+            (BATCH,),
+            PROJECTIONS,
+        ),
+    )
+    html = json.loads(build()["discovery"])
+
+    assert (discovery["discoveryMethod"], discovery["officialRevision"]) == ("EXPLICIT_ARTIFACT_LIST", COMMIT)
+    assert html["discoveryMethod"] == "NAV_CLOSED"

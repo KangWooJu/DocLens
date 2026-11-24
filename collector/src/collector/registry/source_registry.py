@@ -24,7 +24,7 @@ EXPECTED_CONTENT_TYPE = {
     GIT_BLOB: "text/plain",
 }
 # commit 고정 raw URL의 경로 /<owner>/<repo>/<40자리 commit>/
-COMMIT_ROOT_PATH = re.compile(r"/[^/]+/[^/]+/[0-9a-f]{40}/")
+COMMIT_ROOT_PATH = re.compile(r"/[^/]+/[^/]+/([0-9a-f]{40})/")
 DOCUMENT_TYPES = frozenset(
     {
         "REFERENCE",
@@ -262,6 +262,13 @@ def match_inputs(
         return "VALIDATION_FAILED"
 
     return None
+
+
+def git_commit(url: str) -> str | None:
+    """commit 고정 raw URL 경로의 commit, 아니면 None"""
+
+    match = COMMIT_ROOT_PATH.match(urlsplit(url).path)
+    return None if match is None else match.group(1)
 
 
 def _input_of(source: Source) -> RequestInput:

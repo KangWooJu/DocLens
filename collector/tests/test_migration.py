@@ -1,4 +1,4 @@
-"""V001 trigger와 CHECK가 강제하는 불변 규칙"""
+"""V001, V002 trigger와 CHECK가 강제하는 불변 규칙"""
 
 from uuid import UUID, uuid4
 
@@ -60,7 +60,7 @@ def insert_send(
     return send_id
 
 
-def test_flyway_history_has_v001(pg: psycopg.Connection) -> None:
+def test_flyway_history_has_v001_and_v002(pg: psycopg.Connection) -> None:
     rows = (
         pg
         .execute(
@@ -69,7 +69,92 @@ def test_flyway_history_has_v001(pg: psycopg.Connection) -> None:
         .fetchall()
     )
 
-    assert rows == [("001", True)]
+    assert rows == [("001", True), ("002", True)]
+
+
+def raw_key_checks(pg: psycopg.Connection) -> list[tuple[str, str]]:
+    return (
+        pg
+        .execute(
+            """
+            SELECT conname, pg_get_constraintdef(oid)
+            FROM pg_constraint
+            WHERE conrelid = 'collector.collection_targets'::regclass AND contype = 'c'
+              AND pg_get_constraintdef(oid) LIKE '%raw_key%'
+            ORDER BY conname
+            """,
+        )
+        .fetchall()
+    )
+
+
+def test_raw_key_check_takes_html_and_txt_named_by_the_raw_hash(pg: psycopg.Connection) -> None:
+    checks = raw_key_checks(pg)
+
+    assert [name for name, body in checks if "raw_key ~" in body or "substr(raw_key" in body] == [
+        "collection_targets_raw_key_shape",
+    ]
+    assert any("raw_key IS NOT NULL" in body for _, body in checks)
+
+    insert_source(pg)
+    run_id, _, documents = insert_run(
+        pg,
+        insert_job(pg),
+        documents=6,
+    )
+
+    def succeed(
+        document_id: str,
+        key_hash: str,
+        raw_hash: str,
+        extension: str,
+    ) -> None:
+        pg.execute(
+            """
+            UPDATE collector.collection_targets
+            SET state = 'SUCCEEDED', raw_key = %(key)s, raw_hash = %(hash)s, raw_size = 1,
+                observed_at = clock_timestamp(), final_url = 'https://docs.spring.io/x.html'
+            WHERE run_id = %(run_id)s AND document_id = %(document_id)s
+            """,
+            {
+                "key": f"raw/spring-boot/4.1.2/{key_hash}.{extension}",
+                "hash": "sha256:" + raw_hash,
+                "run_id": run_id,
+                "document_id": document_id,
+            },
+        )
+
+    succeed(
+        documents[0],
+        "1" * 64,
+        "1" * 64,
+        "html",
+    )
+    succeed(
+        documents[1],
+        "2" * 64,
+        "2" * 64,
+        "txt",
+    )
+
+    for document_id, key_hash, extension in (
+        (documents[2], "4" * 64, "txt"),
+        (documents[3], "3" * 64, "kt"),
+        (documents[4], "3" * 64, "txt.html"),
+    ):
+        with pytest.raises(CheckViolation):
+            succeed(
+                document_id,
+                key_hash,
+                "3" * 64,
+                extension,
+            )
+
+    with pytest.raises(CheckViolation):
+        pg.execute(
+            "UPDATE collector.collection_targets SET raw_key = %s WHERE run_id = %s AND document_id = %s",
+            ("raw/spring-boot/4.1.2/" + "5" * 64 + ".txt", run_id, documents[5]),
+        )
 
 
 def test_jobs_guard(pg: psycopg.Connection) -> None:

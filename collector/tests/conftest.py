@@ -66,7 +66,7 @@ def migrate(
     postgres: PostgresContainer,
     network: Network,
 ) -> None:
-    """운영과 같은 Flyway CLI 이미지로 V001 적용"""
+    """운영과 같은 Flyway CLI 이미지로 db/migration 전체 적용"""
 
     flyway = (
         DockerContainer("flyway/flyway:12.11.0")
