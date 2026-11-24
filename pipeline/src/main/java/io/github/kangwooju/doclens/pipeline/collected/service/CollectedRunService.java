@@ -12,6 +12,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.springframework.stereotype.Service;
 
@@ -29,7 +31,10 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-/** collector readyRun 하나를 pipeline Build 요청으로, 참조 manifest의 hash, 크기, 집합, 개수를 모두 검증 */
+/**
+ * collector readyRun 하나를 pipeline Build 요청으로, 참조 manifest의 hash, 크기, 집합, 개수를 모두 검증
+ * commit 고정 원본은 같은 run에 봉인된 gradle.properties bytes로 버전과 commit을 다시 판정
+ */
 @Service
 @RequiredArgsConstructor
 public class CollectedRunService {
@@ -41,6 +46,29 @@ public class CollectedRunService {
     private static final String NO_RAW = "none";
 
     private static final Comparator<String> CODE_POINT_ORDER = CanonicalJson::compareCodePoints;
+
+    // commit 고정 git blob 원본의 input sourceType
+    private static final String GIT_BLOB = "git-blob";
+
+    // commit 고정 원본이 아는 유일한 버전 규칙
+    private static final String GRADLE_PROPERTIES_RULE = "gradle-properties-version-v1";
+
+    // commit 고정 원본의 버전 근거 방법
+    private static final String PINNED_METHOD = "VERSION_PINNED_URL";
+
+    // 버전 근거 파일의 저장소 경로
+    private static final String GRADLE_PROPERTIES = "gradle.properties";
+
+    // commit 고정 raw URL, commit과 저장소 경로
+    private static final Pattern PINNED_URL = Pattern
+            .compile("https://raw\\.githubusercontent\\.com/[^/]+/[^/]+/([0-9a-f]{40})/(.+)");
+
+    // gradle.properties 첫 version 줄의 값
+    private static final Pattern GRADLE_VERSION = Pattern
+            .compile(
+                    "^version=(\\S+)$",
+                    Pattern.MULTILINE
+            );
 
     private final ObjectStore objectStore;
     private final JsonMapper jsonMapper;
@@ -152,6 +180,10 @@ public class CollectedRunService {
                     .add(request(
                             projection,
                             outcomes,
+                            optionalText(
+                                    discovery,
+                                    "officialRevision"
+                            ),
                             snapshotHash,
                             processingConfigHash
                     ));
@@ -313,10 +345,11 @@ public class CollectedRunService {
         }
     }
 
-    // projection 하나의 Build 요청, 필수 실패가 있으면 CollectedRunIncompleteException
+    // projection 하나의 Build 요청, 필수 실패가 있으면 CollectedRunIncompleteException, 예시 원본은 include로
     private BuildRequest request(
             JsonNode projection,
             List<JsonNode> outcomes,
+            String officialRevision,
             String snapshotHash,
             String processingConfigHash
     ) {
@@ -328,6 +361,8 @@ public class CollectedRunService {
         List<String> failedIds = new ArrayList<>();
         List<String> errorCodes = new ArrayList<>();
         List<SourceEntry> sources = new ArrayList<>();
+        List<SourceEntry> includes = new ArrayList<>();
+        List<JsonNode> pinned = new ArrayList<>();
 
         for (JsonNode outcome : outcomes) {
             JsonNode input = object(
@@ -343,8 +378,25 @@ public class CollectedRunService {
             }
 
             if (succeeded(outcome)) {
-                sources
-                        .add(source(outcome));
+                SourceEntry source = source(outcome);
+
+                if (source
+                        .documentType() == DocumentType.EXAMPLE) {
+                    includes
+                            .add(source);
+                } else {
+                    sources
+                            .add(source);
+                }
+
+                if (GIT_BLOB
+                        .equals(text(
+                                input,
+                                "sourceType"
+                        ))) {
+                    pinned
+                            .add(outcome);
+                }
             } else if (flag(
                     input,
                     "required"
@@ -370,6 +422,18 @@ public class CollectedRunService {
             );
         }
 
+        if (!pinned
+                .isEmpty()) {
+            requireGradleVersion(
+                    pinned,
+                    officialRevision,
+                    text(
+                            scope,
+                            "exactVersion"
+                    )
+            );
+        }
+
         return new BuildRequest(
                 text(
                         scope,
@@ -390,8 +454,115 @@ public class CollectedRunService {
                 snapshotHash,
                 processingConfigHash,
                 null,
-                sources
+                sources,
+                includes
         );
+    }
+
+    // commit 고정 원본의 버전 근거, 봉인된 gradle.properties bytes의 version과 모든 commit 일치
+    private void requireGradleVersion(
+            List<JsonNode> pinned,
+            String officialRevision,
+            String exactVersion
+    ) {
+
+        List<JsonNode> properties = new ArrayList<>();
+
+        for (JsonNode outcome : pinned) {
+            JsonNode evidence = object(
+                    outcome,
+                    "versionEvidence"
+            );
+            String rule = text(
+                    evidence,
+                    "selectorRuleId"
+            );
+
+            if (!GRADLE_PROPERTIES_RULE
+                    .equals(rule)) {
+                throw new CollectedRunInvalidException(
+                        "selectorRuleId",
+                        "unknown version rule " + rule
+                );
+            }
+
+            if (!PINNED_METHOD
+                    .equals(text(
+                            evidence,
+                            "method"
+                    ))) {
+                throw new CollectedRunInvalidException(
+                        "versionEvidence",
+                        "method must be " + PINNED_METHOD
+                );
+            }
+
+            String url = text(
+                    outcome,
+                    "url"
+            );
+            Matcher matcher = PINNED_URL
+                    .matcher(url);
+
+            if (!matcher
+                    .matches()) {
+                throw new CollectedRunInvalidException(
+                        "url",
+                        "not a commit pinned raw URL " + url
+                );
+            }
+
+            String commit = matcher
+                    .group(1);
+
+            if (!commit
+                    .equals(officialRevision) || !commit
+                            .equals(optionalText(
+                                    outcome,
+                                    "sourceCommit"
+                            ))) {
+                throw new CollectedRunInvalidException(
+                        "sourceCommit",
+                        url + " differs from officialRevision or sourceCommit"
+                );
+            }
+
+            if (GRADLE_PROPERTIES
+                    .equals(matcher
+                            .group(2))) {
+                properties
+                        .add(outcome);
+            }
+        }
+
+        if (properties
+                .size() != 1) {
+            throw new CollectedRunInvalidException(
+                    GRADLE_PROPERTIES,
+                    "expected one sealed outcome, found " + properties
+                            .size()
+            );
+        }
+
+        Matcher version = GRADLE_VERSION
+                .matcher(new String(
+                        bytes(ref(
+                                properties
+                                        .getFirst(),
+                                "raw"
+                        )),
+                        StandardCharsets.UTF_8
+                ));
+
+        if (!version
+                .find() || !version
+                        .group(1)
+                        .equals(exactVersion)) {
+            throw new CollectedRunInvalidException(
+                    GRADLE_PROPERTIES,
+                    "version differs from " + exactVersion
+            );
+        }
     }
 
     // SUCCESS outcome 하나의 Build 원본

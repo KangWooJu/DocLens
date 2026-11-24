@@ -29,7 +29,7 @@ public class BuildRequestPolicy {
     private static final Pattern DOT_SEGMENT = Pattern
             .compile("(^|/)\\.{1,2}(/|$)");
 
-    /** 요청 형식, 적용 범위, 문서 수, documentId 중복, object key 검사, 어긋나면 IllegalArgumentException */
+    /** 요청 형식, 적용 범위, 문서 수, 원본과 include의 documentId 중복, object key 검사, 어긋나면 IllegalArgumentException */
     public void requireValid(BuildRequest request) {
 
         if (request == null) {
@@ -83,17 +83,49 @@ public class BuildRequestPolicy {
             throw new IllegalArgumentException("a build needs 1 to " + MAX_DOCUMENTS + " sources");
         }
 
+        List<SourceEntry> includes = request
+                .includes();
+
+        if (includes == null) {
+            throw new IllegalArgumentException("includes is required, use an empty list for none");
+        }
+
+        if (sources
+                .size() + includes
+                        .size() > MAX_DOCUMENTS) {
+            throw new IllegalArgumentException("a build needs at most " + MAX_DOCUMENTS + " sources and includes");
+        }
+
         Set<String> documentIds = new HashSet<>();
 
         for (SourceEntry source : sources) {
             requireSource(source);
+            requireUnique(
+                    documentIds,
+                    source
+            );
+        }
 
-            if (!documentIds
-                    .add(source
-                            .documentId())) {
-                throw new IllegalArgumentException("duplicate documentId " + source
-                        .documentId());
-            }
+        for (SourceEntry include : includes) {
+            requireSource(include);
+            requireUnique(
+                    documentIds,
+                    include
+            );
+        }
+    }
+
+    // 원본과 include 전체에서 처음 보는 documentId
+    private static void requireUnique(
+            Set<String> documentIds,
+            SourceEntry source
+    ) {
+
+        if (!documentIds
+                .add(source
+                        .documentId())) {
+            throw new IllegalArgumentException("duplicate documentId " + source
+                    .documentId());
         }
     }
 

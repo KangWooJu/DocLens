@@ -78,8 +78,12 @@ public class BuildService {
                                 .hash()
                 );
         String sourceDigest = buildDigestHelper
-                .sourceDigest(request
-                        .sources());
+                .sourceDigest(
+                        request
+                                .sources(),
+                        request
+                                .includes()
+                );
         Optional<UUID> created = buildRepository
                 .insertBuild(new NewBuild(
                         UUID

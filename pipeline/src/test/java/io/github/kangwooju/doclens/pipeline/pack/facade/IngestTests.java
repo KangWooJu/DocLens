@@ -236,7 +236,9 @@ class IngestTests {
                                 hash('9'),
                                 null,
                                 valid
-                                        .sources()
+                                        .sources(),
+                                valid
+                                        .includes()
                         ))
         );
         assertEquals(
@@ -483,8 +485,185 @@ class IngestTests {
         );
     }
 
-    // 고정 범위 값과 현재 처리 설정 hash의 요청
+    @Test
+    @DisplayName("include가 없는 요청의 원본 digest는 include 도입 전 값과 같음")
+    void keepsSourceDigestWithoutIncludes() throws IOException {
+
+        UUID buildId = facade
+                .ingest(request(List
+                        .of(source(
+                                "reference.html",
+                                "reference.html"
+                        ))))
+                .buildId();
+
+        assertEquals(
+                "sha256:8b07b8dd1ba12cddfd2774bf8c2531d1de19d45ffeaebd033efea69b92a8ca0d",
+                jdbcClient
+                        .sql("SELECT source_digest FROM pipeline.builds WHERE build_id = ?")
+                        .param(buildId)
+                        .query(String.class)
+                        .single()
+        );
+    }
+
+    @Test
+    @DisplayName("같은 작업 키에 include가 다르면 충돌")
+    void rejectsDifferentIncludesForSameJob() throws IOException {
+
+        List<SourceEntry> sources = List
+                .of(source(
+                        "reference.html",
+                        "reference.html"
+                ));
+
+        facade
+                .ingest(request(
+                        sources,
+                        List
+                                .of(include(
+                                        "gradle.properties",
+                                        "version=4.1.2\n"
+                                ))
+                ));
+
+        assertThrows(
+                BuildInputConflictException.class,
+                () -> facade
+                        .ingest(request(
+                                sources,
+                                List
+                                        .of(include(
+                                                "gradle.properties",
+                                                "version=4.1.3\n"
+                                        ))
+                        ))
+        );
+    }
+
+    @Test
+    @DisplayName("include bytes가 rawSha256과 다르면 문서를 파싱하지 않고 FAILED")
+    void failsOnIncludeHashMismatch() throws IOException {
+
+        SourceEntry include = include(
+                "gradle.properties",
+                "version=4.1.2\n"
+        );
+
+        Files
+                .writeString(
+                        objectRoot
+                                .resolve(include
+                                        .rawObjectKey()),
+                        "version=changed\n"
+                );
+
+        BuildResult failed = facade
+                .ingest(request(
+                        List
+                                .of(source(
+                                        "reference.html",
+                                        "reference.html"
+                                )),
+                        List
+                                .of(include)
+                ));
+
+        assertEquals(
+                BuildStatus.FAILED,
+                failed
+                        .status()
+        );
+        assertEquals(
+                0,
+                count("SELECT count(*) FROM pipeline.document_artifacts")
+        );
+    }
+
+    @Test
+    @DisplayName("include 객체가 없으면 보류와 산출물 없이 RUNNING, 객체가 생긴 뒤 재전송하면 봉인")
+    void resumesAfterMissingInclude() throws IOException {
+
+        SourceEntry include = include(
+                "gradle.properties",
+                "version=4.1.2\n"
+        );
+        Path includeFile = objectRoot
+                .resolve(include
+                        .rawObjectKey());
+        byte[] includeBytes = Files
+                .readAllBytes(includeFile);
+        BuildRequest request = request(
+                List
+                        .of(
+                                source(
+                                        "reference.html",
+                                        "reference.html"
+                                ),
+                                source(
+                                        "f16-sections-tabs-table-links.html",
+                                        "f16.html"
+                                )
+                        ),
+                List
+                        .of(include)
+        );
+
+        Files
+                .delete(includeFile);
+
+        BuildResult waiting = facade
+                .ingest(request);
+
+        assertEquals(
+                BuildStatus.RUNNING,
+                waiting
+                        .status()
+        );
+        assertEquals(
+                List
+                        .of(),
+                waiting
+                        .holds()
+        );
+        assertEquals(
+                0,
+                count("SELECT count(*) FROM pipeline.document_artifacts")
+        );
+
+        Files
+                .write(
+                        includeFile,
+                        includeBytes
+                );
+
+        assertEquals(
+                BuildStatus.SEALED,
+                facade
+                        .ingest(request)
+                        .status()
+        );
+        assertEquals(
+                2,
+                count("SELECT count(*) FROM pipeline.document_artifacts WHERE outcome = 'DONE'")
+        );
+    }
+
+    // 고정 범위 값과 현재 처리 설정 hash의 include 없는 요청
     private static BuildRequest request(List<SourceEntry> sources) {
+
+        return request(
+                sources,
+                List
+                        .of()
+        );
+    }
+
+    // 고정 범위 값과 현재 처리 설정 hash의 요청
+    private static BuildRequest request(
+            List<SourceEntry> sources,
+            List<SourceEntry> includes
+    ) {
 
         return new BuildRequest(
                 "spring-boot",
@@ -495,7 +674,44 @@ class IngestTests {
                 BuildFixtures
                         .currentHash(),
                 null,
-                sources
+                sources,
+                includes
+        );
+    }
+
+    // 내용을 raw 경로에 쓰고 commit 고정 원본 URL로 만든 예시 include
+    private static SourceEntry include(
+            String path,
+            String content
+    ) throws IOException {
+
+        byte[] bytes = content
+                .getBytes(StandardCharsets.UTF_8);
+        String url = ParseFixtures.RAW_ROOT + path;
+        String key = "raw/spring-boot/4.1.2/" + sha256(bytes)
+                .substring(7) + ".txt";
+        Path file = objectRoot
+                .resolve(key);
+
+        Files
+                .createDirectories(file
+                        .getParent());
+        Files
+                .write(
+                        file,
+                        bytes
+                );
+
+        return new SourceEntry(
+                CanonicalJson
+                        .sha256(url),
+                DocumentType.EXAMPLE,
+                url,
+                url,
+                url,
+                "snap-1",
+                sha256(bytes),
+                key
         );
     }
 

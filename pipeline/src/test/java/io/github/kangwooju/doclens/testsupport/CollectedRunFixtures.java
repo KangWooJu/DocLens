@@ -12,6 +12,7 @@ import java.util.Map;
 import io.github.kangwooju.doclens.core.json.CanonicalJson;
 import io.github.kangwooju.doclens.pipeline.collected.dto.ObjectRef;
 import io.github.kangwooju.doclens.pipeline.global.id.IdHash;
+import io.github.kangwooju.doclens.pipeline.parse.ParseFixtures;
 
 /**
  * 합성 fixture 원본으로 만든 collector readyRun 묶음, batch 하나
@@ -33,6 +34,12 @@ public final class CollectedRunFixtures {
 
     /** 합성 fixture 버전 */
     public static final String VERSION = "4.1.2";
+
+    /** 합성 git fixture의 commit, AsciiDoc fixture 원본 URL 뿌리의 commit과 같음 */
+    public static final String COMMIT = "0123456789abcdef0123456789abcdef01234567";
+
+    /** commit 고정 원본의 버전 규칙 */
+    public static final String GIT_VERSION_RULE = "gradle-properties-version-v1";
 
     /** projection 범위 key */
     public static final String INPUT_SCOPE_KEY = "sha256:" + "a"
@@ -91,8 +98,105 @@ public final class CollectedRunFixtures {
         return write(parts(succeededReferences()));
     }
 
+    /** 실패 없는 git blob 문서, Reference 쪽 둘과 예시 코드와 partial과 gradle.properties의 예시 */
+    public static List<Document> succeededGitDocuments() {
+
+        List<Document> documents = new ArrayList<>();
+
+        for (String page : List
+                .of(
+                        "sample.adoc",
+                        "nested/deep.adoc"
+                )) {
+            documents
+                    .add(new Document(
+                            ParseFixtures.PAGES + page,
+                            "REFERENCE",
+                            true,
+                            true
+                    ));
+        }
+
+        for (String url : ParseFixtures
+                .asciidocIncludes()
+                .keySet()) {
+            documents
+                    .add(new Document(
+                            url
+                                    .substring(ParseFixtures.RAW_ROOT
+                                            .length()),
+                            "EXAMPLE",
+                            true,
+                            true
+                    ));
+        }
+
+        documents
+                .add(new Document(
+                        "gradle.properties",
+                        "EXAMPLE",
+                        true,
+                        true
+                ));
+
+        return documents;
+    }
+
     /** 문서 목록의 manifest 내용 */
     public static Parts parts(List<Document> documents) {
+
+        return parts(
+                documents,
+                false
+        );
+    }
+
+    /** commit 고정 git blob 문서 목록의 manifest 내용, fixture는 AsciiDoc fixture 뿌리 기준 저장소 경로 */
+    public static Parts gitParts(List<Document> documents) {
+
+        return parts(
+                documents,
+                true
+        );
+    }
+
+    /** outcome 하나의 raw bytes를 새 key에 두고 objectRef와 근거 hash를 새 bytes로 */
+    @SuppressWarnings("unchecked")
+    public static void replaceRaw(
+            Parts parts,
+            Map<String, Object> outcome,
+            byte[] bytes
+    ) {
+
+        String rawKey = "raw/" + PROJECT + "/" + VERSION + "/" + sha256(bytes)
+                .substring(7) + ".txt";
+        parts
+                .raws()
+                .put(
+                        rawKey,
+                        bytes
+                );
+        outcome
+                .put(
+                        "raw",
+                        ref(
+                                rawKey,
+                                bytes
+                        )
+                );
+        ((Map<String, Object>) outcome
+                .get("versionEvidence"))
+                .put(
+                        "contentHash",
+                        sha256(bytes)
+                );
+    }
+
+    // 문서 목록의 manifest 내용, git이면 commit 고정 원본과 근거
+    private static Parts parts(
+            List<Document> documents,
+            boolean git
+    ) {
 
         List<Map<String, Object>> targets = new ArrayList<>();
         List<Map<String, Object>> outcomes = new ArrayList<>();
@@ -102,15 +206,18 @@ public final class CollectedRunFixtures {
         int successCount = 0;
 
         for (Document document : documents) {
-            Map<String, Object> input = input(document);
-            String url = PackRequestFixtures.BASE_URL + document
+            Map<String, Object> input = input(
+                    document,
+                    git
+            );
+            String url = (git ? ParseFixtures.RAW_ROOT : PackRequestFixtures.BASE_URL) + document
                     .fixture();
             String documentId = IdHash
                     .hash(
                             "document-v1",
                             PROJECT,
                             VERSION,
-                            "html",
+                            git ? "git-blob" : "html",
                             document
                                     .documentType(),
                             url
@@ -143,11 +250,13 @@ public final class CollectedRunFixtures {
                         .add(input);
             }
 
-            byte[] raw = PackRequestFixtures
-                    .bytes(document
-                            .fixture());
+            byte[] raw = git ? ParseFixtures
+                    .asciidocBytes(document
+                            .fixture()) : PackRequestFixtures
+                                    .bytes(document
+                                            .fixture());
             String rawKey = "raw/" + PROJECT + "/" + VERSION + "/" + sha256(raw)
-                    .substring(7) + ".html";
+                    .substring(7) + (git ? ".txt" : ".html");
 
             if (document
                     .succeeded()) {
@@ -166,7 +275,8 @@ public final class CollectedRunFixtures {
                                     .succeeded() ? ref(
                                             rawKey,
                                             raw
-                                    ) : null
+                                    ) : null,
+                            git
                     ));
         }
 
@@ -202,8 +312,17 @@ public final class CollectedRunFixtures {
         discovery
                 .put(
                         "discoveryMethod",
-                        "NAV_CLOSED"
+                        git ? "EXPLICIT_ARTIFACT_LIST" : "NAV_CLOSED"
                 );
+
+        if (git) {
+            discovery
+                    .put(
+                            "officialRevision",
+                            COMMIT
+                    );
+        }
+
         discovery
                 .put(
                         "requiredInputs",
@@ -453,7 +572,10 @@ public final class CollectedRunFixtures {
     }
 
     // 문서 하나의 contracts input
-    private static Map<String, Object> input(Document document) {
+    private static Map<String, Object> input(
+            Document document,
+            boolean git
+    ) {
 
         Map<String, Object> input = new LinkedHashMap<>();
         input
@@ -475,7 +597,7 @@ public final class CollectedRunFixtures {
         input
                 .put(
                         "sourceType",
-                        "html"
+                        git ? "git-blob" : "html"
                 );
         input
                 .put(
@@ -498,10 +620,11 @@ public final class CollectedRunFixtures {
         return input;
     }
 
-    // 대상 하나의 outcome, raw가 없으면 FAILED
+    // 대상 하나의 outcome, raw가 없으면 FAILED, git이면 commit과 버전 규칙
     private static Map<String, Object> outcome(
             Map<String, Object> target,
-            Map<String, Object> raw
+            Map<String, Object> raw,
+            boolean git
     ) {
 
         Map<String, Object> outcome = new LinkedHashMap<>(target);
@@ -569,7 +692,7 @@ public final class CollectedRunFixtures {
             evidence
                     .put(
                             "method",
-                            "PAGE_MARKER"
+                            git ? "VERSION_PINNED_URL" : "PAGE_MARKER"
                     );
             evidence
                     .put(
@@ -591,6 +714,19 @@ public final class CollectedRunFixtures {
                     .put(
                             "raw",
                             raw
+                    );
+        }
+
+        if (git) {
+            evidence
+                    .put(
+                            "selectorRuleId",
+                            GIT_VERSION_RULE
+                    );
+            outcome
+                    .put(
+                            "sourceCommit",
+                            COMMIT
                     );
         }
 

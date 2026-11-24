@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -28,6 +29,7 @@ import io.github.kangwooju.doclens.pipeline.collected.exception.CollectedRunInva
 import io.github.kangwooju.doclens.pipeline.pack.dto.BuildRequest;
 import io.github.kangwooju.doclens.pipeline.pack.dto.SourceEntry;
 import io.github.kangwooju.doclens.pipeline.pack.store.LocalObjectStore;
+import io.github.kangwooju.doclens.pipeline.parse.ParseFixtures;
 import io.github.kangwooju.doclens.testsupport.CollectedRunFixtures;
 import io.github.kangwooju.doclens.testsupport.CollectedRunFixtures.Bundle;
 import io.github.kangwooju.doclens.testsupport.CollectedRunFixtures.Document;
@@ -45,6 +47,11 @@ class CollectedRunServiceTests {
     private static final JsonMapper JSON_MAPPER = JsonMapper
             .builder()
             .build();
+
+    private static final String OTHER_COMMIT = "f"
+            .repeat(40);
+
+    private static final String PAGE_URL = ParseFixtures.RAW_ROOT + ParseFixtures.PAGES + "sample.adoc";
 
     private static final Path CONTRACTS = Path
             .of(System
@@ -476,17 +483,22 @@ class CollectedRunServiceTests {
             store(bundle
                     .objects());
 
+            BuildRequest request = service()
+                    .requests(
+                            bundle
+                                    .readyRun(),
+                            CONFIG_HASH
+                    )
+                    .getFirst();
+            List<SourceEntry> entries = entry
+                    .getValue() == DocumentType.EXAMPLE ? request
+                            .includes() : request
+                                    .sources();
+
             assertEquals(
                     entry
                             .getValue(),
-                    service()
-                            .requests(
-                                    bundle
-                                            .readyRun(),
-                                    CONFIG_HASH
-                            )
-                            .getFirst()
-                            .sources()
+                    entries
                             .getFirst()
                             .documentType(),
                     entry
@@ -500,6 +512,291 @@ class CollectedRunServiceTests {
 
         assertInvalid(unknown
                 .readyRun());
+    }
+
+    @Test
+    @DisplayName("HTML readyRun은 include 없음, 예시 문서는 Pack 원본이 아니라 include")
+    void splitsExamplesIntoIncludes() {
+
+        Bundle html = CollectedRunFixtures
+                .bundle();
+        store(html
+                .objects());
+
+        assertEquals(
+                List
+                        .of(),
+                service()
+                        .requests(
+                                html
+                                        .readyRun(),
+                                CONFIG_HASH
+                        )
+                        .getFirst()
+                        .includes()
+        );
+
+        List<Document> documents = CollectedRunFixtures
+                .succeededGitDocuments();
+        BuildRequest request = gitRequest(CollectedRunFixtures
+                .gitParts(documents));
+
+        assertEquals(
+                List
+                        .of(
+                                DocumentType.REFERENCE,
+                                DocumentType.REFERENCE
+                        ),
+                request
+                        .sources()
+                        .stream()
+                        .map(SourceEntry::documentType)
+                        .toList()
+        );
+        assertEquals(
+                documents
+                        .size() - 2,
+                request
+                        .includes()
+                        .size()
+        );
+        assertTrue(request
+                .includes()
+                .stream()
+                .allMatch(include -> include
+                        .documentType() == DocumentType.EXAMPLE));
+        assertTrue(request
+                .includes()
+                .stream()
+                .anyMatch(include -> include
+                        .canonicalUrl()
+                        .equals(ParseFixtures.RAW_ROOT + "gradle.properties")));
+    }
+
+    @Test
+    @DisplayName("필수 예시 실패는 버전 판정보다 먼저 입력 보류")
+    void requiredExampleFailureIsIncompleteFirst() {
+
+        List<Document> documents = new ArrayList<>(CollectedRunFixtures
+                .succeededGitDocuments());
+        documents
+                .set(
+                        documents
+                                .size() - 1,
+                        new Document(
+                                "gradle.properties",
+                                "EXAMPLE",
+                                true,
+                                false
+                        )
+                );
+
+        Bundle bundle = CollectedRunFixtures
+                .write(CollectedRunFixtures
+                        .gitParts(documents));
+        store(bundle
+                .objects());
+
+        assertThrows(
+                CollectedRunIncompleteException.class,
+                () -> service()
+                        .requests(
+                                bundle
+                                        .readyRun(),
+                                CONFIG_HASH
+                        )
+        );
+    }
+
+    @Test
+    @DisplayName("실패한 선택 문서의 commit은 버전 판정 대상이 아님")
+    void ignoresFailedOutcomesInVersionCheck() {
+
+        List<Document> documents = new ArrayList<>(CollectedRunFixtures
+                .succeededGitDocuments());
+        documents
+                .add(new Document(
+                        ParseFixtures.PAGES + "broken-tag.adoc",
+                        "REFERENCE",
+                        false,
+                        false
+                ));
+
+        Parts parts = CollectedRunFixtures
+                .gitParts(documents);
+        parts
+                .outcomes()
+                .getLast()
+                .put(
+                        "sourceCommit",
+                        OTHER_COMMIT
+                );
+
+        assertEquals(
+                2,
+                gitRequest(parts)
+                        .sources()
+                        .size()
+        );
+    }
+
+    @Test
+    @DisplayName("gradle.properties outcome이 없거나 둘이면 검증 실패")
+    void requiresOneGradleProperties() {
+
+        List<Document> withoutProperties = new ArrayList<>(CollectedRunFixtures
+                .succeededGitDocuments());
+        withoutProperties
+                .removeLast();
+        assertInvalid(CollectedRunFixtures
+                .gitParts(withoutProperties));
+
+        Parts twice = gitParts();
+        outcome(
+                twice,
+                PAGE_URL
+        )
+                .put(
+                        "url",
+                        "https://raw.githubusercontent.com/spring-projects/other/" + CollectedRunFixtures.COMMIT + "/gradle.properties"
+                );
+        assertInvalid(twice);
+    }
+
+    @Test
+    @DisplayName("봉인된 gradle.properties bytes의 version이 범위 버전과 다르면 검증 실패")
+    void rejectsGradleVersionMismatch() {
+
+        Parts parts = gitParts();
+        CollectedRunFixtures
+                .replaceRaw(
+                        parts,
+                        outcome(
+                                parts,
+                                ParseFixtures.RAW_ROOT + "gradle.properties"
+                        ),
+                        "version=4.1.3\n"
+                                .getBytes(StandardCharsets.UTF_8)
+                );
+
+        assertInvalid(parts);
+    }
+
+    @Test
+    @DisplayName("officialRevision, run 안 commit, URL과 sourceCommit 중 하나라도 다르면 검증 실패")
+    void rejectsCommitMismatch() {
+
+        Parts revision = gitParts();
+        revision
+                .discovery()
+                .put(
+                        "officialRevision",
+                        OTHER_COMMIT
+                );
+        assertInvalid(revision);
+
+        Parts twoCommits = gitParts();
+        Map<String, Object> other = outcome(
+                twoCommits,
+                PAGE_URL
+        );
+        other
+                .put(
+                        "url",
+                        PAGE_URL
+                                .replace(
+                                        CollectedRunFixtures.COMMIT,
+                                        OTHER_COMMIT
+                                )
+                );
+        other
+                .put(
+                        "sourceCommit",
+                        OTHER_COMMIT
+                );
+        assertInvalid(twoCommits);
+
+        Parts sourceCommit = gitParts();
+        outcome(
+                sourceCommit,
+                PAGE_URL
+        )
+                .put(
+                        "sourceCommit",
+                        OTHER_COMMIT
+                );
+        assertInvalid(sourceCommit);
+    }
+
+    @Test
+    @DisplayName("모르는 버전 규칙이나 commit 고정이 아닌 근거 방법은 검증 실패")
+    @SuppressWarnings("unchecked")
+    void rejectsUnknownVersionRule() {
+
+        Parts rule = gitParts();
+        ((Map<String, Object>) outcome(
+                rule,
+                PAGE_URL
+        )
+                .get("versionEvidence"))
+                .put(
+                        "selectorRuleId",
+                        "antora-meta-version-v1"
+                );
+        assertInvalid(rule);
+
+        Parts method = gitParts();
+        ((Map<String, Object>) outcome(
+                method,
+                PAGE_URL
+        )
+                .get("versionEvidence"))
+                .put(
+                        "method",
+                        "PAGE_MARKER"
+                );
+        assertInvalid(method);
+    }
+
+    // 실패 없는 git blob 문서의 manifest 내용
+    private static Parts gitParts() {
+
+        return CollectedRunFixtures
+                .gitParts(CollectedRunFixtures
+                        .succeededGitDocuments());
+    }
+
+    // URL이 같은 outcome 하나
+    private static Map<String, Object> outcome(
+            Parts parts,
+            String url
+    ) {
+
+        return parts
+                .outcomes()
+                .stream()
+                .filter(outcome -> url
+                        .equals(outcome
+                                .get("url")))
+                .findFirst()
+                .orElseThrow();
+    }
+
+    // 묶어 저장한 git blob readyRun의 요청 하나
+    private BuildRequest gitRequest(Parts parts) {
+
+        Bundle bundle = CollectedRunFixtures
+                .write(parts);
+        store(bundle
+                .objects());
+
+        return service()
+                .requests(
+                        bundle
+                                .readyRun(),
+                        CONFIG_HASH
+                )
+                .getFirst();
     }
 
     // 문서 유형 하나의 성공 문서 하나 묶음

@@ -1,6 +1,8 @@
 package io.github.kangwooju.doclens.pipeline.pack.facade;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.stereotype.Component;
@@ -27,6 +29,7 @@ import io.github.kangwooju.doclens.pipeline.pack.service.PackExportService;
 import io.github.kangwooju.doclens.pipeline.pack.service.ProcessingConfigService;
 import io.github.kangwooju.doclens.pipeline.pack.type.BuildStatus;
 import io.github.kangwooju.doclens.pipeline.pack.type.SourceReadOutcome;
+import io.github.kangwooju.doclens.pipeline.parse.dto.SourceDocument;
 import io.github.kangwooju.doclens.pipeline.parse.dto.StructuredDocument;
 import io.github.kangwooju.doclens.pipeline.parse.exception.DocumentHoldException;
 import io.github.kangwooju.doclens.pipeline.parse.service.DocumentParseService;
@@ -125,6 +128,7 @@ public class PackBuildFacade {
 
     /**
      * Build 시작 또는 재개, 산출물 없는 문서만 PARSE와 CHUNK, 모두 있으면 봉인
+     * 남은 문서가 있으면 include를 먼저 모두 읽고 하나라도 객체가 없으면 어떤 문서도 파싱하지 않고 RUNNING 그대로 반환
      * 처리 설정 hash가 다르면 DB에 쓰기 전에 ProcessingConfigMismatchException
      */
     public BuildResult ingest(BuildRequest request) {
@@ -149,6 +153,43 @@ public class PackBuildFacade {
             return result(state);
         }
 
+        Map<String, SourceDocument> includes = new HashMap<>();
+
+        if (!state
+                .pending()
+                .isEmpty()) {
+            for (SourceEntry include : request
+                    .includes()) {
+                SourceRead read = buildService
+                        .readSource(
+                                state
+                                        .build(),
+                                include
+                        );
+
+                if (read
+                        .outcome() == SourceReadOutcome.MISSING) {
+                    return result(state);
+                }
+
+                if (read
+                        .outcome() == SourceReadOutcome.HASH_MISMATCH) {
+                    return fail(
+                            state,
+                            include
+                    );
+                }
+
+                includes
+                        .put(
+                                include
+                                        .canonicalUrl(),
+                                read
+                                        .document()
+                        );
+            }
+        }
+
         for (SourceEntry source : state
                 .pending()) {
             SourceRead read = buildService
@@ -165,24 +206,16 @@ public class PackBuildFacade {
 
             if (read
                     .outcome() == SourceReadOutcome.HASH_MISMATCH) {
-                transactionExecutor
-                        .write(() -> {
-                            buildService
-                                    .fail(
-                                            state
-                                                    .build()
-                                                    .buildId(),
-                                            "raw bytes do not match rawSha256 for " + source
-                                                    .documentId()
-                                    );
-
-                            return null;
-                        });
-
-                return result(state);
+                return fail(
+                        state,
+                        source
+                );
             }
 
-            ArtifactRow artifact = artifact(read);
+            ArtifactRow artifact = artifact(
+                    read,
+                    includes
+            );
 
             transactionExecutor
                     .write(() -> {
@@ -266,13 +299,42 @@ public class PackBuildFacade {
                 .buildId());
     }
 
+    // 원본 bytes가 rawSha256과 달라 Build 실패 기록 뒤 현재 상태
+    private BuildResult fail(
+            BuildState state,
+            SourceEntry source
+    ) {
+
+        transactionExecutor
+                .write(() -> {
+                    buildService
+                            .fail(
+                                    state
+                                            .build()
+                                            .buildId(),
+                                    "raw bytes do not match rawSha256 for " + source
+                                            .documentId()
+                            );
+
+                    return null;
+                });
+
+        return result(state);
+    }
+
     // 원본 하나의 PARSE와 CHUNK 산출물, 보류면 보류 행, CPU 작업이라 트랜잭션 밖
-    private ArtifactRow artifact(SourceRead read) {
+    private ArtifactRow artifact(
+            SourceRead read,
+            Map<String, SourceDocument> includes
+    ) {
 
         try {
             StructuredDocument structured = documentParseService
-                    .parse(read
-                            .document());
+                    .parse(
+                            read
+                                    .document(),
+                            includes
+                    );
             PackDocument packDocument = chunkService
                     .chunk(structured);
 
