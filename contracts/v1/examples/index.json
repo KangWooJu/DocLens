@@ -55,6 +55,18 @@
       "expect": "rejected"
     },
     {
+      "file": "documentOutcomeGitBlob.accepted.json",
+      "schema": "collection.schema.json",
+      "definition": "documentOutcome",
+      "expect": "accepted"
+    },
+    {
+      "file": "documentOutcomeGitBlob.rejected.json",
+      "schema": "collection.schema.json",
+      "definition": "documentOutcome",
+      "expect": "rejected"
+    },
+    {
       "file": "error.accepted.json",
       "schema": "collection.schema.json",
       "definition": "error",
