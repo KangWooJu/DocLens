@@ -9,6 +9,8 @@ public record ProcessingConfigInputs(
         String parserPolicyVersion,
         String chunkerPolicyVersion,
         String jsoupVersion,
+        String asciidoctorjVersion,
+        String jrubyVersion,
         int structuredDocumentSchemaVersion,
         int codeMaxBytes,
         int targetBytes,

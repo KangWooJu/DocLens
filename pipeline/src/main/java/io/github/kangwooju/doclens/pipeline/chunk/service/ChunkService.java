@@ -38,7 +38,7 @@ import lombok.RequiredArgsConstructor;
 public class ChunkService {
 
     /** 청커 정책 버전, 문장 경계가 JDK에 묶여 JDK 주 버전을 포함 */
-    public static final String CHUNKER_POLICY_VERSION = "chunker-v2-jdk" + Runtime
+    public static final String CHUNKER_POLICY_VERSION = "chunker-v3-jdk" + Runtime
             .version()
             .feature();
 
@@ -260,7 +260,9 @@ public class ChunkService {
                         .sourceMapJson(
                                 members,
                                 section
-                                        .headingPath()
+                                        .headingPath(),
+                                section
+                                        .citation()
                         ),
                 codeVariants,
                 identifierHelper

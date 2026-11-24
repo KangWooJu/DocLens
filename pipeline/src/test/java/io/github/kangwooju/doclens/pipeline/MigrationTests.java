@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import java.util.List;
 import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -312,6 +313,58 @@ class MigrationTests {
         );
         assertDoesNotThrow(() -> jdbcClient
                 .sql("INSERT INTO pipeline.document_artifacts (build_id, document_id, outcome, hold_reason) VALUES (?, ?, 'HELD', 'TITLE_MISSING')")
+                .params(
+                        buildId,
+                        DOCUMENT_ID
+                )
+                .update());
+    }
+
+    @Test
+    @DisplayName("V002 뒤 보류 사유 CHECK는 같은 이름 하나, ASCIIDOC_UNRESOLVED 허용, 모르는 값 거부")
+    void allowsAsciidocHoldReason() {
+
+        UUID buildId = insertBuild(
+                UUID.randomUUID(),
+                "RUNNING"
+        );
+
+        insertSource(
+                buildId,
+                "REFERENCE"
+        );
+
+        assertEquals(
+                1,
+                jdbcClient
+                        .sql("SELECT count(*) FROM pipeline.flyway_schema_history WHERE version = '002' AND success")
+                        .query(Integer.class)
+                        .single()
+        );
+        assertEquals(
+                List
+                        .of("document_artifacts_hold_reason_check"),
+                jdbcClient
+                        .sql("""
+                                SELECT conname FROM pg_constraint
+                                WHERE conrelid = 'pipeline.document_artifacts'::regclass
+                                AND pg_get_constraintdef(oid) LIKE '%hold_reason = ANY%'
+                                """)
+                        .query(String.class)
+                        .list()
+        );
+        assertThrows(
+                DataAccessException.class,
+                () -> jdbcClient
+                        .sql("INSERT INTO pipeline.document_artifacts (build_id, document_id, outcome, hold_reason) VALUES (?, ?, 'HELD', 'ASCIIDOC_UNKNOWN')")
+                        .params(
+                                buildId,
+                                DOCUMENT_ID
+                        )
+                        .update()
+        );
+        assertDoesNotThrow(() -> jdbcClient
+                .sql("INSERT INTO pipeline.document_artifacts (build_id, document_id, outcome, hold_reason) VALUES (?, ?, 'HELD', 'ASCIIDOC_UNRESOLVED')")
                 .params(
                         buildId,
                         DOCUMENT_ID

@@ -1,0 +1,8 @@
+[[warn]]
+= Unclosed Block
+
+[[warn.body]]
+== Body
+
+====
+This example block is never closed.

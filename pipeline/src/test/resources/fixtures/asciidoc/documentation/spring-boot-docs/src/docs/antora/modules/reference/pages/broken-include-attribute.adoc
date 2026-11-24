@@ -1,0 +1,7 @@
+[[broken]]
+= Broken Include Attribute
+
+[[broken.body]]
+== Body
+
+include::reference:partial$snippet.adoc[lines=1]

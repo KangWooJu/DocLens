@@ -310,7 +310,8 @@ public class BlockExtractHelper {
                     headingPath,
                     level,
                     ordinal,
-                    blocks
+                    blocks,
+                    null
             );
         }
     }

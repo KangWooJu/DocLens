@@ -2,6 +2,7 @@ package io.github.kangwooju.doclens.pipeline.pack.policy;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -17,6 +18,7 @@ import io.github.kangwooju.doclens.core.json.CanonicalJson;
 import io.github.kangwooju.doclens.core.pack.type.VariantGroupType;
 import io.github.kangwooju.doclens.pipeline.pack.dto.ProcessingConfig;
 import io.github.kangwooju.doclens.pipeline.pack.dto.ProcessingConfigInputs;
+import io.github.kangwooju.doclens.pipeline.parse.dto.AsciidocRules;
 import io.github.kangwooju.doclens.pipeline.parse.dto.ParserProfile;
 import io.github.kangwooju.doclens.pipeline.parse.store.ParserProfileStore;
 
@@ -113,6 +115,10 @@ class ProcessingConfigPolicyTests {
                         original
                                 .jsoupVersion(),
                         original
+                                .asciidoctorjVersion(),
+                        original
+                                .jrubyVersion(),
+                        original
                                 .structuredDocumentSchemaVersion(),
                         original
                                 .codeMaxBytes(),
@@ -150,6 +156,10 @@ class ProcessingConfigPolicyTests {
                         original
                                 .jsoupVersion(),
                         original
+                                .asciidoctorjVersion(),
+                        original
+                                .jrubyVersion(),
+                        original
                                 .structuredDocumentSchemaVersion(),
                         original
                                 .codeMaxBytes(),
@@ -186,6 +196,10 @@ class ProcessingConfigPolicyTests {
                                 .chunkerPolicyVersion(),
                         "1.25.0",
                         original
+                                .asciidoctorjVersion(),
+                        original
+                                .jrubyVersion(),
+                        original
                                 .structuredDocumentSchemaVersion(),
                         original
                                 .codeMaxBytes(),
@@ -212,6 +226,133 @@ class ProcessingConfigPolicyTests {
                         original
                                 .profiles()
                 ))
+        );
+    }
+
+    @Test
+    @DisplayName("AsciidoctorJ, JRuby 버전, AsciiDoc 규칙, 구조 산출물 형식 버전이 바뀌면 다른 hash")
+    void changesWithAsciidocInputs() {
+
+        ParserProfile asciidoc = ParserProfileStore.SPRING_BOOT_ASCIIDOC_REFERENCE;
+        ProcessingConfigInputs original = inputs(asciidoc);
+        String base = hash(original);
+        AsciidocRules rules = asciidoc
+                .asciidoc();
+        AsciidocRules otherRules = new AsciidocRules(
+                rules
+                        .readerUrlRoot(),
+                rules
+                        .sourceViewRoot(),
+                rules
+                        .antoraModulesPath(),
+                rules
+                        .rootExamplesPath(),
+                rules
+                        .includeCodePath(),
+                rules
+                        .generatedIncludes(),
+                rules
+                        .linkAttributePrefixes(),
+                List
+                        .of(),
+                rules
+                        .attributes(),
+                rules
+                        .exactVersionAttribute()
+        );
+        String preimage = policy
+                .create(original)
+                .preimageJson();
+
+        for (String key : List
+                .of(
+                        "\"asciidoctorjVersion\":\"3.0.1\"",
+                        "\"jrubyVersion\":\"9.4.14.0\"",
+                        "\"structuredDocumentSchemaVersion\":2",
+                        "\"exactVersionAttribute\":\"version-spring-boot\"",
+                        "\"residueAllowlist\":[\"web/spring-graphql.adoc|include-code::RSocketGraphQlClientExample[\"]"
+                )) {
+            assertTrue(
+                    preimage
+                            .contains(key),
+                    key
+            );
+        }
+
+        assertTrue(policy
+                .create(inputs(PROFILE))
+                .preimageJson()
+                .contains("\"asciidoc\":null"));
+        assertNotEquals(
+                base,
+                hash(versions(
+                        original,
+                        "3.0.2",
+                        original
+                                .jrubyVersion(),
+                        original
+                                .structuredDocumentSchemaVersion()
+                ))
+        );
+        assertNotEquals(
+                base,
+                hash(versions(
+                        original,
+                        original
+                                .asciidoctorjVersion(),
+                        "9.4.15.0",
+                        original
+                                .structuredDocumentSchemaVersion()
+                ))
+        );
+        assertNotEquals(
+                base,
+                hash(versions(
+                        original,
+                        original
+                                .asciidoctorjVersion(),
+                        original
+                                .jrubyVersion(),
+                        1
+                ))
+        );
+        assertNotEquals(
+                base,
+                hash(inputs(new ParserProfile(
+                        asciidoc
+                                .profileId(),
+                        asciidoc
+                                .profileVersion(),
+                        asciidoc
+                                .project(),
+                        asciidoc
+                                .documentType(),
+                        asciidoc
+                                .urlPattern(),
+                        asciidoc
+                                .rootSelector(),
+                        asciidoc
+                                .excludedSelectors(),
+                        asciidoc
+                                .headingSelectors(),
+                        asciidoc
+                                .tabSelectors(),
+                        asciidoc
+                                .versionMarkerRule(),
+                        asciidoc
+                                .fixtureHashes(),
+                        asciidoc
+                                .approvalState(),
+                        asciidoc
+                                .defaultTabRule(),
+                        asciidoc
+                                .preferredDefaultLabels(),
+                        asciidoc
+                                .canonicalLabels(),
+                        asciidoc
+                                .groupTypes(),
+                        otherRules
+                )))
         );
     }
 
@@ -266,14 +407,61 @@ class ProcessingConfigPolicyTests {
                 .hash();
     }
 
+    // 라이브러리 버전과 구조 산출물 형식 버전만 바꾼 입력
+    private static ProcessingConfigInputs versions(
+            ProcessingConfigInputs original,
+            String asciidoctorjVersion,
+            String jrubyVersion,
+            int structuredDocumentSchemaVersion
+    ) {
+
+        return new ProcessingConfigInputs(
+                original
+                        .parserPolicyVersion(),
+                original
+                        .chunkerPolicyVersion(),
+                original
+                        .jsoupVersion(),
+                asciidoctorjVersion,
+                jrubyVersion,
+                structuredDocumentSchemaVersion,
+                original
+                        .codeMaxBytes(),
+                original
+                        .targetBytes(),
+                original
+                        .maxBytes(),
+                original
+                        .maxBlocks(),
+                original
+                        .overlapMaxBytes(),
+                original
+                        .headerRepeatMaxBytes(),
+                original
+                        .separator(),
+                original
+                        .identifierPatterns(),
+                original
+                        .identifierMaxLength(),
+                original
+                        .sourceAttribution(),
+                original
+                        .createdBy(),
+                original
+                        .profiles()
+        );
+    }
+
     // 프로필 하나와 고정 값으로 만든 입력
     private static ProcessingConfigInputs inputs(ParserProfile profile) {
 
         return new ProcessingConfigInputs(
-                "parser-v3",
-                "chunker-v2-jdk21",
+                "parser-v4",
+                "chunker-v3-jdk21",
                 "1.24.1",
-                1,
+                "3.0.1",
+                "9.4.14.0",
+                2,
                 1048576,
                 6000,
                 12000,
@@ -328,7 +516,9 @@ class ProcessingConfigPolicyTests {
                 profile
                         .preferredDefaultLabels(),
                 canonicalLabels,
-                groupTypes
+                groupTypes,
+                profile
+                        .asciidoc()
         );
     }
 }

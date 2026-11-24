@@ -1,0 +1,1 @@
+This snippet comes from a partial file.

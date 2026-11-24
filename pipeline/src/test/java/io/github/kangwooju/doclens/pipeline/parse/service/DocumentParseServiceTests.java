@@ -697,7 +697,8 @@ class DocumentParseServiceTests {
                                 new ParserProfileStore(List
                                         .of()),
                                 new io.github.kangwooju.doclens.pipeline.parse.policy.ParserProfilePolicy(),
-                                new io.github.kangwooju.doclens.pipeline.parse.helper.BlockExtractHelper()
+                                new io.github.kangwooju.doclens.pipeline.parse.helper.BlockExtractHelper(),
+                                ParseFixtures.ASCIIDOC_HTML_HELPER
                         )
                                 .parse(ParseFixtures
                                         .source(REFERENCE))

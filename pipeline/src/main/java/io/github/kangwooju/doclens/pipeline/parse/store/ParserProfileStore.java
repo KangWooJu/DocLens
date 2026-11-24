@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 
 import io.github.kangwooju.doclens.core.pack.type.DocumentType;
 import io.github.kangwooju.doclens.core.pack.type.VariantGroupType;
+import io.github.kangwooju.doclens.pipeline.parse.dto.AsciidocRules;
 import io.github.kangwooju.doclens.pipeline.parse.dto.ParserProfile;
 import io.github.kangwooju.doclens.pipeline.parse.dto.TabSelectors;
 import io.github.kangwooju.doclens.pipeline.parse.type.ApprovalState;
@@ -114,7 +115,69 @@ public class ParserProfileStore {
                                             "properties",
                                             "yaml"
                                     )
-                    )
+                    ),
+            null
+    );
+
+    /**
+     * Spring Boot GitHub AsciiDoc Reference 프로필, 같은 commit의 include를 써서 HTML로 바꾼 뒤 HTML 프로필과 같은 선택자로 읽음
+     * 버전 근거는 문서 URL의 commit, 실제 표본 대조와 사용자 승인 전이라 CANDIDATE
+     * 생성 partial은 원본에 없어 표지 한 줄, 잔여 허용 항목은 원문 저자 실수 한 곳
+     */
+    public static final ParserProfile SPRING_BOOT_ASCIIDOC_REFERENCE = new ParserProfile(
+            "spring-boot-asciidoc-reference",
+            "1",
+            "spring-boot",
+            DocumentType.REFERENCE,
+            "https://raw\\.githubusercontent\\.com/spring-projects/spring-boot/[0-9a-f]{40}/documentation/spring-boot-docs/src/docs/antora/modules/reference/pages/.+\\.adoc",
+            "article.doc",
+            List
+                    .of(),
+            SPRING_BOOT_REFERENCE
+                    .headingSelectors(),
+            SPRING_BOOT_REFERENCE
+                    .tabSelectors(),
+            VersionMarkerRule.COMMIT_PINNED_URL,
+            List
+                    .of(),
+            ApprovalState.CANDIDATE,
+            SPRING_BOOT_REFERENCE
+                    .defaultTabRule(),
+            SPRING_BOOT_REFERENCE
+                    .preferredDefaultLabels(),
+            SPRING_BOOT_REFERENCE
+                    .canonicalLabels(),
+            SPRING_BOOT_REFERENCE
+                    .groupTypes(),
+            new AsciidocRules(
+                    "https://docs.spring.io/spring-boot/",
+                    "https://github.com/spring-projects/spring-boot/blob/",
+                    "documentation/spring-boot-docs/src/docs/antora/modules/",
+                    "documentation/spring-boot-docs/src/main/",
+                    "documentation/spring-boot-docs/src/main/{lang}/org/springframework/boot/docs/",
+                    List
+                            .of(
+                                    "ROOT:partial$starters/",
+                                    "ROOT:partial$propertydefaults/",
+                                    "ROOT:partial$application/",
+                                    "ROOT:partial$logging/",
+                                    "ROOT:example$remote-spring-application.txt"
+                            ),
+                    List
+                            .of(
+                                    "url-",
+                                    "code-",
+                                    "apiref-"
+                            ),
+                    List
+                            .of("web/spring-graphql.adoc|include-code::RSocketGraphQlClientExample["),
+                    Map
+                            .of(
+                                    "build-type",
+                                    "opensource"
+                            ),
+                    "version-spring-boot"
+            )
     );
 
     private final List<ParserProfile> profiles;
@@ -123,7 +186,10 @@ public class ParserProfileStore {
     public ParserProfileStore() {
 
         this(List
-                .of(SPRING_BOOT_REFERENCE));
+                .of(
+                        SPRING_BOOT_REFERENCE,
+                        SPRING_BOOT_ASCIIDOC_REFERENCE
+                ));
     }
 
     /** 지정한 프로필 목록 */

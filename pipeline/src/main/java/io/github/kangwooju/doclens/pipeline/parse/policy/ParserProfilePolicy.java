@@ -76,6 +76,19 @@ public class ParserProfilePolicy {
         }
     }
 
+    /** AsciiDoc 변환의 판정 재료가 비어 있어야 통과, 아니면 첫 항목으로 보류 */
+    public void requireResolved(List<String> unresolved) {
+
+        if (!unresolved
+                .isEmpty()) {
+            throw new DocumentHoldException(
+                    HoldReason.ASCIIDOC_UNRESOLVED,
+                    unresolved
+                            .getFirst()
+            );
+        }
+    }
+
     /** 본문 root가 정확히 하나여야 통과 */
     public void requireSingleRoot(
             int rootCount,

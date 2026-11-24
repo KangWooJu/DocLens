@@ -13,6 +13,7 @@ import io.github.kangwooju.doclens.core.json.CanonicalJson;
 import io.github.kangwooju.doclens.core.pack.type.VariantGroupType;
 import io.github.kangwooju.doclens.pipeline.pack.dto.ProcessingConfig;
 import io.github.kangwooju.doclens.pipeline.pack.dto.ProcessingConfigInputs;
+import io.github.kangwooju.doclens.pipeline.parse.dto.AsciidocRules;
 import io.github.kangwooju.doclens.pipeline.parse.dto.ParserProfile;
 
 /**
@@ -154,6 +155,18 @@ public class ProcessingConfigPolicy {
                         "jsoupVersion",
                         inputs
                                 .jsoupVersion()
+                );
+        parser
+                .put(
+                        "asciidoctorjVersion",
+                        inputs
+                                .asciidoctorjVersion()
+                );
+        parser
+                .put(
+                        "jrubyVersion",
+                        inputs
+                                .jrubyVersion()
                 );
         parser
                 .put(
@@ -341,6 +354,84 @@ public class ProcessingConfigPolicy {
                 .put(
                         "groupTypes",
                         groupTypes
+                );
+        map
+                .put(
+                        "asciidoc",
+                        asciidoc(profile
+                                .asciidoc())
+                );
+
+        return map;
+    }
+
+    // AsciiDoc 규칙 전체의 preimage, HTML 프로필은 null
+    private static Map<String, Object> asciidoc(AsciidocRules rules) {
+
+        if (rules == null) {
+            return null;
+        }
+
+        Map<String, Object> map = new HashMap<>();
+        map
+                .put(
+                        "readerUrlRoot",
+                        rules
+                                .readerUrlRoot()
+                );
+        map
+                .put(
+                        "sourceViewRoot",
+                        rules
+                                .sourceViewRoot()
+                );
+        map
+                .put(
+                        "antoraModulesPath",
+                        rules
+                                .antoraModulesPath()
+                );
+        map
+                .put(
+                        "rootExamplesPath",
+                        rules
+                                .rootExamplesPath()
+                );
+        map
+                .put(
+                        "includeCodePath",
+                        rules
+                                .includeCodePath()
+                );
+        map
+                .put(
+                        "generatedIncludes",
+                        rules
+                                .generatedIncludes()
+                );
+        map
+                .put(
+                        "linkAttributePrefixes",
+                        rules
+                                .linkAttributePrefixes()
+                );
+        map
+                .put(
+                        "residueAllowlist",
+                        rules
+                                .residueAllowlist()
+                );
+        map
+                .put(
+                        "attributes",
+                        new HashMap<String, Object>(rules
+                                .attributes())
+                );
+        map
+                .put(
+                        "exactVersionAttribute",
+                        rules
+                                .exactVersionAttribute()
                 );
 
         return map;

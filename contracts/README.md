@@ -47,7 +47,7 @@ Language-neutral contracts shared by the Python collector and the Java modules. 
 
 `processingConfigHash` = `sha256:` + hex SHA-256 of the canonical JSON (same rules as `requestHash`) of a `processing-config-v1` preimage. The pipeline builds it from the values that change its output:
 
-- parser: policy version, jsoup version, code size limit, every registered parser profile except `fixtureHashes` (approval evidence)
+- parser: policy version, jsoup version, AsciidoctorJ version (jar manifest), JRuby version (runtime), code size limit, every registered parser profile except `fixtureHashes` (approval evidence), including its `asciidoc` rules (null for HTML profiles)
 - chunker: policy version (includes the JDK major), target/max bytes, max blocks, overlap, header repeat limit, separator
 - identifiers: code patterns, maximum length
 - artifacts: structured document schema version
