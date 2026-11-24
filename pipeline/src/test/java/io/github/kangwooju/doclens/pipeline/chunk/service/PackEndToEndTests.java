@@ -19,10 +19,11 @@ import io.github.kangwooju.doclens.core.pack.dto.PackMeta;
 import io.github.kangwooju.doclens.core.pack.dto.PackWriteResult;
 import io.github.kangwooju.doclens.core.pack.reader.PackReader;
 import io.github.kangwooju.doclens.core.pack.writer.PackWriter;
+import io.github.kangwooju.doclens.pipeline.pack.policy.ProcessingConfigPolicy;
 import io.github.kangwooju.doclens.pipeline.parse.ParseFixtures;
 import io.github.kangwooju.doclens.pipeline.parse.service.DocumentParseService;
 
-@DisplayName("HTML에서 Pack 파일과 검색까지")
+@DisplayName("HTML과 AsciiDoc에서 Pack 파일과 검색까지")
 class PackEndToEndTests {
 
     @TempDir
@@ -97,7 +98,87 @@ class PackEndToEndTests {
         }
     }
 
-    // 조회 결과의 heading 경로 목록
+    @Test
+    @DisplayName("AsciiDoc 원본과 include로 파싱, 청크, Pack 쓰기 뒤 Reader에서 청크 인용과 문서 include 기록, 출처 문구")
+    void writesAsciidocPackWithCitations() throws Exception {
+
+        PackDocument document = ChunkServiceTests
+                .service()
+                .chunk(ParseFixtures
+                        .asciidocService()
+                        .parse(
+                                ParseFixtures
+                                        .asciidocPage("sample.adoc"),
+                                ParseFixtures
+                                        .asciidocIncludes()
+                        ));
+        Path target = directory
+                .resolve("sample.pack");
+
+        try (PackWriter writer = PackWriter
+                .create(
+                        target,
+                        meta()
+                )) {
+            writer
+                    .add(document);
+            writer
+                    .finish();
+        }
+
+        try (PackReader reader = PackReader
+                .open(target)) {
+            List<String> citations = reader
+                    .query(connection -> {
+                        try (PreparedStatement statement = connection
+                                .prepareStatement("SELECT DISTINCT json_extract(m.value, '$.citation.readerUrl') || ' ' || json_extract(m.value, '$.citation.sourceUrl')"
+                                        + " FROM chunks c JOIN sections s ON s.section_id = c.section_id, json_each(c.source_map_json) m"
+                                        + " WHERE s.anchor = ?")) {
+                            statement
+                                    .setString(
+                                            1,
+                                            "sample.code"
+                                    );
+
+                            return headings(statement);
+                        }
+                    });
+            List<String> includes = reader
+                    .query(connection -> {
+                        try (PreparedStatement statement = connection
+                                .prepareStatement("SELECT json_array_length(source_map_json, '$.includes') FROM documents")) {
+                            return headings(statement);
+                        }
+                    });
+            List<String> attribution = reader
+                    .query(connection -> {
+                        try (PreparedStatement statement = connection
+                                .prepareStatement("SELECT json_extract(value, '$') FROM pack_meta WHERE key = 'sourceAttribution'")) {
+                            return headings(statement);
+                        }
+                    });
+
+            assertEquals(
+                    List
+                            .of("https://docs.spring.io/spring-boot/4.1/reference/sample.html#sample.code"
+                                    + " https://github.com/spring-projects/spring-boot/blob/0123456789abcdef0123456789abcdef01234567/"
+                                    + ParseFixtures.PAGES + "sample.adoc?plain=1#L39"),
+                    citations
+            );
+            assertEquals(
+                    List
+                            .of("5"),
+                    includes
+            );
+            assertEquals(
+                    List
+                            .of(ProcessingConfigPolicy.SOURCE_ATTRIBUTION),
+                    attribution
+            );
+        }
+    }
+
+    // 조회 결과 첫 열의 글 목록
     private static List<String> headings(PreparedStatement statement) throws SQLException {
 
         List<String> headings = new ArrayList<>();
@@ -129,7 +210,7 @@ class PackEndToEndTests {
                         .repeat(64),
                 DocumentParseService.PARSER_POLICY_VERSION,
                 ChunkService.CHUNKER_POLICY_VERSION,
-                "Spring documentation, Apache-2.0",
+                ProcessingConfigPolicy.SOURCE_ATTRIBUTION,
                 List
                         .of("sha256:" + "5"
                                 .repeat(64)),
