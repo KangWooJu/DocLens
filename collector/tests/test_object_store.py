@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 from botocore.exceptions import ClientError
 
+from collector.store import object_store
 from collector.store.object_store import ObjectConflict, ObjectStore, s3_client
 from tests.conftest import BUCKET
 
@@ -37,10 +38,34 @@ def test_put_once_adopts_same_bytes_and_rejects_others(store: ObjectStore) -> No
     assert store.get(manifest) == b"{}"
 
 
+def test_git_blob_raw_key_is_text(store: ObjectStore) -> None:
+    body = b"version=4.1.2\n"
+    key = object_store.raw_key(
+        "spring-boot",
+        "4.1.2",
+        body,
+        "git-blob",
+    )
+
+    assert key == f"raw/spring-boot/4.1.2/{hashlib.sha256(body).hexdigest()}.txt"
+    assert object_store.raw_key(
+        "spring-boot",
+        "4.1.2",
+        body,
+        "html",
+    ) == key.removesuffix(".txt") + ".html"
+    assert store.put_once(key, body).object_key == key
+
+
 @pytest.mark.parametrize(
     "key",
     [
         "packs/spring-boot/x.pack",
+        "raw/spring-boot/4.1.3/" + (
+            hashlib
+            .sha256(b"x")
+            .hexdigest()
+        ) + ".kt",
         "raw/spring-boot/4.1.3/" + "0" * 64 + ".html",
         "raw/spring-boot/4.1/" + (
             hashlib

@@ -12,7 +12,19 @@ from collector.contract.ids import h
 SOURCE_ID = re.compile(r"[a-z0-9][a-z0-9.-]{0,127}")
 PROJECT = re.compile(r"[a-z][a-z0-9-]*")
 EXACT_VERSION = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+(?:\.RELEASE)?")
-SOURCE_TYPES = frozenset({"html", "config-metadata", "javadoc"})
+SOURCE_TYPES = frozenset({"html", "config-metadata", "javadoc", "git-blob"})
+GIT_BLOB = "git-blob"
+# allowedPathPrefixes가 정확한 파일 경로 목록인 발견 규칙, 대상은 목록에서 entry를 뺀 것과 목록 전체
+GIT_PATH_LIST = "git-path-list-v1"
+GIT_PATH_LIST_WITH_ENTRY = "git-path-list-with-entry-v1"
+GIT_RULES = frozenset({GIT_PATH_LIST, GIT_PATH_LIST_WITH_ENTRY})
+# source type이 기대하는 응답 media type, 목록에 없는 type은 text/html
+EXPECTED_CONTENT_TYPE = {
+    "html": "text/html",
+    GIT_BLOB: "text/plain",
+}
+# commit 고정 raw URL의 경로 /<owner>/<repo>/<40자리 commit>/
+COMMIT_ROOT_PATH = re.compile(r"/[^/]+/[^/]+/[0-9a-f]{40}/")
 DOCUMENT_TYPES = frozenset(
     {
         "REFERENCE",
@@ -162,6 +174,17 @@ def parse_definition(entry: Mapping[str, JsonValue]) -> Source:
         if not isinstance(entry[field], str) or not entry[field]:
             raise DefinitionInvalid(f"{source_id}: {field} must be a non-empty string")
 
+    if (entry["sourceType"] == GIT_BLOB) != (entry["discoveryRuleId"] in GIT_RULES):
+        raise DefinitionInvalid(f"{source_id}: git-blob and the git discovery rules go together")
+
+    if entry["sourceType"] == GIT_BLOB:
+        _check_git_paths(
+            source_id,
+            canonical_root,
+            entry_url,
+            prefixes,
+        )
+
     return Source(
         source_id=source_id,
         project=_matching(
@@ -231,6 +254,13 @@ def match_inputs(
         if source is None or _input_of(source) != item:
             return "SOURCE_UNAPPROVED"
 
+    sources = [by_id[item.source_id] for item in inputs]
+    git_blobs = [source for source in sources if source.source_type == GIT_BLOB]
+
+    # git-blob job은 한 commit의 input만
+    if git_blobs and (len(git_blobs) != len(sources) or len({source.canonical_root for source in sources}) != 1):
+        return "VALIDATION_FAILED"
+
     return None
 
 
@@ -244,6 +274,29 @@ def _input_of(source: Source) -> RequestInput:
         required=source.required,
         applicability=source.applicability,
     )
+
+
+def _check_git_paths(
+    source_id: str,
+    canonical_root: str,
+    entry_url: str,
+    paths: tuple[str, ...],
+) -> None:
+    """commit 고정 canonicalRoot 아래 파일 경로, entry 포함, 중복 없음"""
+
+    root = urlsplit(canonical_root).path
+
+    if COMMIT_ROOT_PATH.fullmatch(root) is None:
+        raise DefinitionInvalid(f"{source_id}: canonicalRoot must be /<owner>/<repo>/<40 hex commit>/")
+
+    if any(not path.startswith(root) or path.endswith("/") for path in paths):
+        raise DefinitionInvalid(f"{source_id}: allowedPathPrefixes must be file paths under canonicalRoot")
+
+    if len(paths) != len(set(paths)):
+        raise DefinitionInvalid(f"{source_id}: allowedPathPrefixes has duplicates")
+
+    if urlsplit(entry_url).path not in paths:
+        raise DefinitionInvalid(f"{source_id}: allowedPathPrefixes must list the entry path")
 
 
 def _matching(

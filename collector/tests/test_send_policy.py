@@ -21,6 +21,7 @@ from tests.support.fixture_site import site
 
 POLICY = CrawlPolicy()
 PAGE = site(pages=3)["/spring-boot/4.1/reference/index.html"]
+GRADLE_PROPERTIES = b"# synthetic\nversion=4.1.2\n"
 
 
 def response(
@@ -120,10 +121,56 @@ def test_wait_uses_longer_crawl_delay_and_retry_after() -> None:
 
 
 def test_accepted_page_is_not_stored_yet() -> None:
-    result = classify(response(200), 1, POLICY)
+    result = classify(
+        response(200),
+        1,
+        POLICY,
+        "html",
+    )
 
     assert isinstance(result, Accepted)
     assert result.markers.version == "4.1.3"
+
+
+def test_git_blob_text_is_accepted_with_text_markers() -> None:
+    result = classify(
+        response(
+            200,
+            GRADLE_PROPERTIES,
+            "text/plain; charset=utf-8",
+        ),
+        1,
+        POLICY,
+        "git-blob",
+    )
+
+    assert isinstance(result, Accepted)
+    assert (result.markers.version, result.markers.nav_hrefs) == ("4.1.2", ())
+
+
+@pytest.mark.parametrize(
+    ("given", "source_type"),
+    [
+        (response(200, b"", "text/plain"), "git-blob"),
+        (response(200, b"version=4.1.2\n\xff", "text/plain"), "git-blob"),
+        (response(200, GRADLE_PROPERTIES, "application/json"), "git-blob"),
+        (response(200), "git-blob"),
+        (response(200, content_type="text/plain"), "html"),
+    ],
+)
+def test_body_must_match_the_source_type(
+    given: Response,
+    source_type: str,
+) -> None:
+    result = classify(
+        given,
+        1,
+        POLICY,
+        source_type,
+    )
+
+    assert isinstance(result, Rejected)
+    assert (result.error_code, result.http_status) == ("INVALID_BODY", 200)
 
 
 @pytest.mark.parametrize(
@@ -152,7 +199,12 @@ def test_rejected_rows(
     given: Response | TransportFailed,
     code: str,
 ) -> None:
-    result = classify(given, 1, POLICY)
+    result = classify(
+        given,
+        1,
+        POLICY,
+        "html",
+    )
 
     assert isinstance(result, Rejected)
     assert (result.error_code, result.needs_review) == (code, True)
@@ -171,9 +223,24 @@ def test_rejected_rows(
     ],
 )
 def test_retryable_rows_wait_then_exhaust(given: Response | TransportFailed) -> None:
-    first = classify(given, 1, POLICY)
-    second = classify(given, 2, POLICY)
-    last = classify(given, 3, POLICY)
+    first = classify(
+        given,
+        1,
+        POLICY,
+        "html",
+    )
+    second = classify(
+        given,
+        2,
+        POLICY,
+        "html",
+    )
+    last = classify(
+        given,
+        3,
+        POLICY,
+        "html",
+    )
 
     assert isinstance(first, Retry) and 30.0 <= first.delay_seconds <= 40.0
     assert isinstance(second, Retry) and 60.0 <= second.delay_seconds <= 70.0

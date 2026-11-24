@@ -10,7 +10,7 @@ from collector.registry.source_registry import (
     parse_definition,
     registry_hash,
 )
-from tests.conftest import definition
+from tests.conftest import FAKE_COMMIT, definition, git_definition
 
 
 def row(entry: dict[str, object]) -> SourceRow:
@@ -113,3 +113,62 @@ def test_match_inputs_codes() -> None:
     assert match_inputs([request_input(boot), request_input(boot)], approved) == "VALIDATION_FAILED"
     assert match_inputs([request_input({**boot, "exactVersion": "4.1.4"})], approved) == "SOURCE_UNAPPROVED"
     assert match_inputs([request_input(boot)], [row(framework)]) == "SOURCE_UNAPPROVED"
+
+
+@pytest.mark.parametrize("rule", ["git-path-list-v1", "git-path-list-with-entry-v1"])
+def test_git_blob_definition_lists_exact_paths(rule: str) -> None:
+    source = parse_definition(git_definition(discovery_rule_id=rule))
+
+    assert (source.source_type, source.discovery_rule_id) == ("git-blob", rule)
+    assert source.scope.allowed_path_prefixes == (
+        f"/spring-projects/spring-boot/{FAKE_COMMIT}/gradle.properties",
+        f"/spring-projects/spring-boot/{FAKE_COMMIT}/docs/pages/index.adoc",
+    )
+
+
+OTHER_COMMIT = "f" * 40
+BASE = f"/spring-projects/spring-boot/{FAKE_COMMIT}/"
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"allowedPathPrefixes": [BASE + "gradle.properties", f"/spring-projects/spring-boot/{OTHER_COMMIT}/a.adoc"]},
+        {"allowedPathPrefixes": [BASE + "gradle.properties", BASE + "docs/"]},
+        {"allowedPathPrefixes": [BASE + "docs/pages/index.adoc"]},
+        {"allowedPathPrefixes": [BASE + "gradle.properties", BASE + "a.adoc", BASE + "a.adoc"]},
+        {
+            "canonicalRoot": "https://raw.githubusercontent.com/spring-projects/spring-boot/v4.1.2/",
+            "entryUrl": "https://raw.githubusercontent.com/spring-projects/spring-boot/v4.1.2/gradle.properties",
+            "allowedPathPrefixes": ["/spring-projects/spring-boot/v4.1.2/gradle.properties"],
+        },
+        {"discoveryRuleId": "antora-nav-closed-v1"},
+        {"sourceType": "html"},
+    ],
+)
+def test_git_blob_definition_rejects_operator_mistakes(change: dict[str, object]) -> None:
+    with pytest.raises(DefinitionInvalid):
+        parse_definition({**git_definition(), **change})
+
+
+def test_html_definition_rejects_git_rules() -> None:
+    with pytest.raises(DefinitionInvalid):
+        parse_definition({**definition(), "discoveryRuleId": "git-path-list-v1"})
+
+
+def test_match_inputs_keeps_git_blob_jobs_on_one_commit() -> None:
+    reference = git_definition()
+    includes = git_definition(
+        "spring-boot-4.1.2-reference-includes",
+        discovery_rule_id="git-path-list-with-entry-v1",
+    )
+    other = git_definition(
+        "spring-boot-4.1.2-reference-other",
+        OTHER_COMMIT,
+    )
+    html = definition()
+    approved = [row(reference), row(includes), row(other), row(html)]
+
+    assert match_inputs([request_input(reference), request_input(includes)], approved) is None
+    assert match_inputs([request_input(reference), request_input(other)], approved) == "VALIDATION_FAILED"
+    assert match_inputs([request_input(reference), request_input(html)], approved) == "VALIDATION_FAILED"

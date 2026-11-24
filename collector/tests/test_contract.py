@@ -58,13 +58,14 @@ def test_id_golden_vectors() -> None:
     assert {"scope-one-input", "scope-two-inputs", "include-exclude"} <= names
 
 
-def test_document_id_matches_vector() -> None:
-    vector = next(item for item in load("id-golden-vectors.json") if item["name"] == "document")
+@pytest.mark.parametrize("name", ["document", "document-git-blob"])
+def test_document_id_matches_vector(name: str) -> None:
+    vector = next(item for item in load("id-golden-vectors.json") if item["name"] == name)
 
     assert document_id(*vector["fields"][1:]) == vector["id"]
 
 
-@pytest.mark.parametrize("name", ["scope-one-input", "scope-two-inputs"])
+@pytest.mark.parametrize("name", ["scope-one-input", "scope-two-inputs", "scope-git-path-list-two-inputs"])
 def test_scope_hash_sorts_inputs_and_matches_vector(name: str) -> None:
     vector = next(item for item in load("id-golden-vectors.json") if item["name"] == name)
     fields = vector["fields"]

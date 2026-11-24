@@ -11,12 +11,13 @@ from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 
 from collector.contract.canonical_json import JsonValue
+from collector.registry.source_registry import GIT_BLOB
 
 OBJECT_KEY = re.compile(
     r"(?!.*(?:^|/)\.{1,2}(?:/|$))(raw|discovery|manifests)/[a-zA-Z0-9_@.-]+(?:/[a-zA-Z0-9_@.-]+)*",
 )
 RAW_KEY = re.compile(
-    r"raw/[a-z][a-z0-9-]*/[0-9]+\.[0-9]+\.[0-9]+(?:\.RELEASE)?/(?P<hex>[0-9a-f]{64})\.html",
+    r"raw/[a-z][a-z0-9-]*/[0-9]+\.[0-9]+\.[0-9]+(?:\.RELEASE)?/(?P<hex>[0-9a-f]{64})\.(?:html|txt)",
 )
 # 조건부 쓰기에 걸린 응답, 같은 key가 이미 있음
 EXISTS_CODES = frozenset({"PreconditionFailed", "ConditionalRequestConflict", "412", "409"})
@@ -165,10 +166,12 @@ def raw_key(
     project: str,
     exact_version: str,
     body: bytes,
+    source_type: str,
 ) -> str:
-    """원본 내용 hash key"""
+    """원본 내용 hash key, git-blob은 .txt"""
 
-    return f"raw/{project}/{exact_version}/{hashlib.sha256(body).hexdigest()}.html"
+    extension = "txt" if source_type == GIT_BLOB else "html"
+    return f"raw/{project}/{exact_version}/{hashlib.sha256(body).hexdigest()}.{extension}"
 
 
 def _check_key(

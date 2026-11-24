@@ -1,6 +1,8 @@
-"""합성 Antora 페이지의 표지 추출"""
+"""합성 Antora 페이지와 text 원본의 표지 추출"""
 
-from collector.crawl.page_markers import read_markers
+import pytest
+
+from collector.crawl.page_markers import read_markers, read_text_markers
 from tests.support.fixture_site import site
 
 ENTRY = "/spring-boot/4.1/reference/index.html"
@@ -44,3 +46,26 @@ def test_truncated_html_keeps_what_was_read() -> None:
     assert markers.version == "4.1.3"
     assert markers.nav_hrefs == ("index.html", "p000.html", "p001.html")
     assert markers.main_chars == 0
+
+
+def test_text_markers_read_the_first_version_line() -> None:
+    body = "# version=0.0.1\n\nname=demo\nversion=4.1.2\nversion=9.9.9\n"
+    markers = read_text_markers(body.encode())
+
+    assert markers.version == "4.1.2"
+    assert (markers.nav_hrefs, markers.main_chars, markers.denied) == ((), len(body), False)
+    assert (markers.versioned_url, markers.source_tag) == (None, None)
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        b"",
+        b"name=demo\n",
+        b"# version=4.1.2\n",
+        b" version=4.1.2\n",
+        b"version = 4.1.2\n",
+    ],
+)
+def test_text_markers_without_a_version_line(body: bytes) -> None:
+    assert read_text_markers(body).version is None

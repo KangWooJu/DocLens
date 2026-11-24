@@ -7,7 +7,8 @@ from datetime import datetime
 from typing import Literal
 
 from collector.config import CrawlPolicy
-from collector.crawl.page_markers import PageMarkers, read_markers
+from collector.crawl.page_markers import PageMarkers, read_markers, read_text_markers
+from collector.registry.source_registry import EXPECTED_CONTENT_TYPE, GIT_BLOB
 
 type FailureKind = Literal["CONNECT", "TLS", "TIMEOUT", "TOO_LARGE", "ENCODING", "DENIED", "INTERNAL"]
 
@@ -202,6 +203,7 @@ def classify(
     response: Response | TransportFailed,
     attempt: int,
     policy: CrawlPolicy,
+    source_type: str,
 ) -> Accepted | Retry | Rejected:
     """문서 응답 판정, 원본 저장 전"""
 
@@ -218,11 +220,9 @@ def classify(
     status = response.status
 
     if status == 200:
-        markers = read_markers(response.body)
+        markers, accepted = read_body(response, source_type)
 
-        if content_type(response.headers) == "text/html" and not markers.denied and (
-            markers.main_chars >= MIN_MAIN_CHARS
-        ):
+        if accepted:
             return Accepted(response, markers)
 
         return Rejected("INVALID_BODY", True, status)
@@ -241,6 +241,32 @@ def classify(
         return Rejected("INVALID_BODY", True, status)
 
     return Rejected(CLIENT_CODES.get(status, "HTTP_CLIENT"), True, status)
+
+
+def read_body(
+    response: Response,
+    source_type: str,
+) -> tuple[PageMarkers, bool]:
+    """source type별 표지와 본문 수용 여부, 기대 media type이 아니면 거부"""
+
+    expected = content_type(response.headers) == EXPECTED_CONTENT_TYPE.get(source_type, "text/html")
+
+    if source_type == GIT_BLOB:
+        return read_text_markers(response.body), expected and _utf8_text(response.body)
+
+    markers = read_markers(response.body)
+    return markers, expected and not markers.denied and markers.main_chars >= MIN_MAIN_CHARS
+
+
+def _utf8_text(body: bytes) -> bool:
+    """1바이트 이상 엄격 UTF-8"""
+
+    try:
+        body.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+
+    return len(body) > 0
 
 
 def content_type(headers: Mapping[str, str]) -> str:
