@@ -13,6 +13,8 @@ import io.github.kangwooju.doclens.pipeline.chunk.dto.ChunkPiece;
 import io.github.kangwooju.doclens.pipeline.parse.dto.Block;
 import io.github.kangwooju.doclens.pipeline.parse.dto.BlockLink;
 import io.github.kangwooju.doclens.pipeline.parse.dto.Provenance;
+import io.github.kangwooju.doclens.pipeline.parse.dto.ResolvedInclude;
+import io.github.kangwooju.doclens.pipeline.parse.dto.SectionCitation;
 import io.github.kangwooju.doclens.pipeline.parse.dto.SourcePointer;
 import io.github.kangwooju.doclens.pipeline.parse.dto.TabGroup;
 import io.github.kangwooju.doclens.pipeline.parse.dto.TabVariant;
@@ -152,10 +154,11 @@ public class ChunkJsonConverter {
                 .write(entries);
     }
 
-    /** 청크 구성원별 원본 위치와 구성원에 든 링크 */
+    /** 청크 구성원별 원본 위치와 구성원에 든 링크, 섹션 인용이 있으면 구성원마다 같은 값 */
     public String sourceMapJson(
             List<ChunkMember> members,
-            List<String> headingPath
+            List<String> headingPath,
+            SectionCitation citation
     ) {
 
         List<Object> entries = new ArrayList<>();
@@ -225,6 +228,15 @@ public class ChunkJsonConverter {
                                     .map(ChunkJsonConverter::link)
                                     .toList()
                     );
+
+            if (citation != null) {
+                entry
+                        .put(
+                                "citation",
+                                citation(citation)
+                        );
+            }
+
             entries
                     .add(entry);
         }
@@ -233,7 +245,7 @@ public class ChunkJsonConverter {
                 .write(entries);
     }
 
-    /** 문서 단위 출처와 정책 버전 */
+    /** 문서 단위 출처와 정책 버전, 문서가 쓴 include가 있으면 그 목록 */
     public String documentSourceMapJson(
             Provenance provenance,
             String chunkerPolicyVersion
@@ -293,6 +305,20 @@ public class ChunkJsonConverter {
                         provenance
                                 .parserPolicyVersion() + "+" + chunkerPolicyVersion
                 );
+
+        if (!provenance
+                .includes()
+                .isEmpty()) {
+            source
+                    .put(
+                            "includes",
+                            provenance
+                                    .includes()
+                                    .stream()
+                                    .map(ChunkJsonConverter::include)
+                                    .toList()
+                    );
+        }
 
         return CanonicalJson
                 .write(source);
@@ -400,6 +426,52 @@ public class ChunkJsonConverter {
                                 })
                                 .toList()
         );
+
+        return entry;
+    }
+
+    // 섹션 인용 두 주소
+    private static Map<String, Object> citation(SectionCitation citation) {
+
+        Map<String, Object> entry = new LinkedHashMap<>();
+        entry
+                .put(
+                        "readerUrl",
+                        citation
+                                .readerUrl()
+                );
+        entry
+                .put(
+                        "sourceUrl",
+                        citation
+                                .sourceUrl()
+                );
+
+        return entry;
+    }
+
+    // 문서가 쓴 include 하나
+    private static Map<String, Object> include(ResolvedInclude include) {
+
+        Map<String, Object> entry = new LinkedHashMap<>();
+        entry
+                .put(
+                        "url",
+                        include
+                                .url()
+                );
+        entry
+                .put(
+                        "rawSha256",
+                        include
+                                .rawSha256()
+                );
+        entry
+                .put(
+                        "tags",
+                        include
+                                .tags()
+                );
 
         return entry;
     }

@@ -211,6 +211,70 @@ class ChunkServiceTests {
     }
 
     @Test
+    @DisplayName("AsciiDoc 청크는 구성원마다 같은 섹션 인용, 문서 출처에 쓴 include, HTML은 두 키 없음")
+    void carriesCitationAndIncludes() {
+
+        PackDocument asciidoc = service()
+                .chunk(ParseFixtures
+                        .asciidocService()
+                        .parse(
+                                ParseFixtures
+                                        .asciidocPage("sample.adoc"),
+                                ParseFixtures
+                                        .asciidocIncludes()
+                        ));
+        PackChunk config = asciidoc
+                .sections()
+                .get(7)
+                .chunks()
+                .getFirst();
+        List<Map<String, Object>> members = sourceMap(config);
+        Map<String, Object> document = JSON
+                .readValue(
+                        asciidoc
+                                .sourceMapJson(),
+                        new TypeReference<>() {
+                        }
+                );
+
+        assertTrue(members
+                .size() > 1);
+        assertEquals(
+                Set
+                        .of(Map
+                                .of(
+                                        "readerUrl",
+                                        "https://docs.spring.io/spring-boot/4.1/reference/sample.html#sample.config",
+                                        "sourceUrl",
+                                        "https://github.com/spring-projects/spring-boot/blob/0123456789abcdef0123456789abcdef01234567/"
+                                                + ParseFixtures.PAGES + "sample.adoc?plain=1#L54"
+                                )),
+                new HashSet<>(members
+                        .stream()
+                        .map(member -> member
+                                .get("citation"))
+                        .toList())
+        );
+        assertEquals(
+                5,
+                ((List<?>) document
+                        .get("includes"))
+                        .size()
+        );
+        assertTrue(sourceMap(REFERENCE
+                .sections()
+                .get(1)
+                .chunks()
+                .getFirst())
+                .stream()
+                .noneMatch(member -> member
+                        .containsKey("citation")));
+        assertFalse(REFERENCE
+                .sourceMapJson()
+                .contains("\"includes\""));
+    }
+
+    @Test
     @DisplayName("blocksJson의 content 범위는 content 안 구성원 위치와 일치")
     void contentRangesMatch() {
 
@@ -662,7 +726,7 @@ class ChunkServiceTests {
         }
 
         assertEquals(
-                "chunker-v2-jdk21",
+                "chunker-v3-jdk21",
                 ChunkService.CHUNKER_POLICY_VERSION
         );
     }
@@ -686,6 +750,18 @@ class ChunkServiceTests {
                 new IdentifierHelper(),
                 new ChunkJsonConverter()
         );
+    }
+
+    // 청크의 sourceMapJson
+    private static List<Map<String, Object>> sourceMap(PackChunk chunk) {
+
+        return JSON
+                .readValue(
+                        chunk
+                                .sourceMapJson(),
+                        new TypeReference<>() {
+                        }
+                );
     }
 
     // 청크의 blocksJson
