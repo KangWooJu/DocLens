@@ -1,4 +1,4 @@
-"""Antora 페이지 표지 추출, stdlib html.parser (순수 함수)"""
+"""Antora 페이지와 text 원본 표지 추출, stdlib html.parser (순수 함수)"""
 
 import re
 from dataclasses import dataclass
@@ -28,6 +28,8 @@ DENIED_TITLE = re.compile(
     r"access denied|attention required|just a moment|captcha|cookies? (?:required|disabled)|log ?in|sign ?in",
     re.IGNORECASE,
 )
+# gradle.properties의 버전 줄
+VERSION_LINE = re.compile(r"^version=(\S+)$", re.MULTILINE)
 
 
 @dataclass(frozen=True)
@@ -53,6 +55,21 @@ def read_markers(html: bytes) -> PageMarkers:
         nav_hrefs=tuple(parser.nav_hrefs),
         main_chars=parser.main_chars,
         denied=DENIED_TITLE.search(parser.title) is not None,
+    )
+
+
+def read_text_markers(body: bytes) -> PageMarkers:
+    """첫 version= 줄과 글자 수, nav 링크 없음"""
+
+    text = body.decode("utf-8", errors="replace")
+    match = VERSION_LINE.search(text)
+    return PageMarkers(
+        version=None if match is None else match.group(1),
+        versioned_url=None,
+        source_tag=None,
+        nav_hrefs=(),
+        main_chars=len(text),
+        denied=False,
     )
 
 

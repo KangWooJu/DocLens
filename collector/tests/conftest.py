@@ -226,6 +226,34 @@ def definition(
     }
 
 
+# 합성 git 정의의 가짜 commit
+FAKE_COMMIT = "0123456789abcdef0123456789abcdef01234567"
+
+
+def git_definition(
+    source_id: str = "spring-boot-4.1.2-reference",
+    commit: str = FAKE_COMMIT,
+    discovery_rule_id: str = "git-path-list-v1",
+) -> dict[str, object]:
+    """commit 고정 raw 경로 목록 정의, entry는 gradle.properties"""
+
+    base = f"/spring-projects/spring-boot/{commit}/"
+    root = "https://raw.githubusercontent.com" + base
+    return {
+        **definition(source_id, "4.1.2"),
+        "project": "spring-boot",
+        "sourceType": "git-blob",
+        "entryUrl": root + "gradle.properties",
+        "canonicalRoot": root,
+        "allowedHosts": ["raw.githubusercontent.com"],
+        "allowedPathPrefixes": [base + "gradle.properties", base + "docs/pages/index.adoc"],
+        "discoveryRuleId": discovery_rule_id,
+        "bodySelectorRuleId": "boot-asciidoc-reference-v1",
+        "versionRuleId": "gradle-properties-version-v1",
+        "officialLinkEvidence": "https://github.com/spring-projects/spring-boot/releases/tag/v4.1.2",
+    }
+
+
 def registry_file(
     directory: Path,
     *entries: dict[str, object],

@@ -196,6 +196,7 @@ class DiscoveryService:
             response,
             self._policy.attempt_cap,
             self._policy,
+            source.source_type,
         )
 
         if not isinstance(decision, Accepted):

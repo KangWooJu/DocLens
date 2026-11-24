@@ -13,7 +13,16 @@ from collector.app import App
 from collector.config import Settings
 from collector.crawl.transport_gate import RawResponse
 from collector.store.object_store import ObjectStore
-from tests.conftest import ROOT, approve_sources, connected_app, definition, record_probe, registry_file
+from tests.conftest import (
+    FAKE_COMMIT,
+    ROOT,
+    approve_sources,
+    connected_app,
+    definition,
+    git_definition,
+    record_probe,
+    registry_file,
+)
 from tests.support.cli import cli
 from tests.support.fixture_server import Reply, serving
 from tests.support.fixture_site import site
@@ -315,6 +324,40 @@ def test_probe_fails_on_other_version_redirect_or_error(
     assert server.total() == 2
     assert probe_state(pg) == ("FAILED", "BLOCKED")
     assert approve[0] == 3
+
+
+@pytest.mark.parametrize(
+    ("version", "code", "state"),
+    [
+        ("4.1.2", 0, "PASSED"),
+        ("4.1.3", 4, "FAILED"),
+    ],
+)
+def test_probe_reads_the_git_blob_version_file(
+    settings: Settings,
+    store: ObjectStore,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    version: str,
+    code: int,
+    state: str,
+) -> None:
+    entry = f"/spring-projects/spring-boot/{FAKE_COMMIT}/gradle.properties"
+    body = f"# synthetic\nversion={version}\n".encode()
+
+    with serving({entry: body}) as server, connected_app(settings, LoopbackConnector(server.port)) as app:
+        app.registry.import_file(registry_file(tmp_path, git_definition()))
+        exit_code, out, _ = probe(
+            app,
+            capsys,
+            "spring-boot-4.1.2-reference",
+        )
+
+    assert (exit_code, out[0]["probeState"], out[0]["probeVersion"]) == (code, state, version)
+    assert out[0]["navCount"] == 0
+    assert out[0]["raw"]["objectKey"].endswith(".txt")
+    assert store.get(out[0]["raw"]["objectKey"]) == body
+    assert [record.path for record in server.records] == ["/robots.txt", entry]
 
 
 class RedefiningConnector:

@@ -222,7 +222,12 @@ def test_redirect_is_returned_not_followed(
     response = gate_app.gate.send(job.lease, page(job, "p000.html"))
 
     assert isinstance(response, Response) and response.status == 301
-    assert classify(response, 1, SCALED) == Rejected("REDIRECT_DENIED", True, 301)
+    assert classify(
+        response,
+        1,
+        SCALED,
+        "html",
+    ) == Rejected("REDIRECT_DENIED", True, 301)
     assert server.counts()[PATH + "p001.html"] == 0
 
 
@@ -253,7 +258,12 @@ def test_size_encoding_and_time_limits(
         gate_app.gate.send(job.lease, page(job, "p000.html"))
 
     assert failed.value.kind == kind
-    assert classify(failed.value, SCALED.attempt_cap, SCALED).error_code == code
+    assert classify(
+        failed.value,
+        SCALED.attempt_cap,
+        SCALED,
+        "html",
+    ).error_code == code
     assert time.monotonic() - started < SCALED.total_deadline + 1.0
     assert sends(pg)[-1][1:] == ("SENT", 200 if kind != "TIMEOUT" or reply.trickle else None, kind)
 

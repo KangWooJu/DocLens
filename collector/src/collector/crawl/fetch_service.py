@@ -153,6 +153,7 @@ class FetchService:
                 failed,
                 1,
                 self._policy,
+                source.source_type,
             )
 
         if isinstance(response, Deferred):
@@ -162,6 +163,7 @@ class FetchService:
             response,
             1,
             self._policy,
+            source.source_type,
         )
 
         if not isinstance(decision, Accepted):
@@ -172,6 +174,7 @@ class FetchService:
                 source.project,
                 source.exact_version,
                 response.body,
+                source.source_type,
             ),
             response.body,
         )

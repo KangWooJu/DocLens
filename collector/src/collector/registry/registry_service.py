@@ -10,8 +10,7 @@ from uuid import uuid4
 
 from collector.contract.canonical_json import JsonValue, utc_text
 from collector.contract.collection_request import CollectionRequest, RequestInput
-from collector.crawl.page_markers import read_markers
-from collector.crawl.send_policy import MIN_MAIN_CHARS, TransportFailed, content_type
+from collector.crawl.send_policy import TransportFailed, read_body
 from collector.crawl.transport_gate import (
     Deferred,
     Fetch,
@@ -25,6 +24,7 @@ from collector.db import Conn
 from collector.errors import RequestRejected
 from collector.registry.registry_repository import ProbeEvidence, RegistryRepository
 from collector.registry.source_registry import (
+    GIT_RULES,
     DefinitionInvalid,
     Source,
     definition_hash,
@@ -263,15 +263,14 @@ class RegistryService:
                 source.project,
                 source.exact_version,
                 response.body,
+                source.source_type,
             ),
             response.body,
         )
-        markers = read_markers(response.body)
+        markers, accepted = read_body(response, source.source_type)
         passed = (
-            content_type(response.headers) == "text/html"
-            and not markers.denied
-            and markers.main_chars >= MIN_MAIN_CHARS
-            and len(markers.nav_hrefs) > 0
+            accepted
+            and (len(markers.nav_hrefs) > 0 or source.discovery_rule_id in GIT_RULES)
             and markers.version == source.exact_version
         )
         return ProbeResult(

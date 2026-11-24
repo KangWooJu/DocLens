@@ -654,6 +654,7 @@ def test_kill_and_resume(
             "spring-boot",
             "4.1.3",
             pages[target],
+            "html",
         ), "--pause-after"],
         "sealed-before-envelope": ["--pause-key", "/envelope.json"],
         "envelope-stored-before-record": ["--pause-key", "/envelope.json", "--pause-after"],

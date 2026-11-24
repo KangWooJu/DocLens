@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "eventType": "DocumentCollected",
+  "runId": "11111111-1111-4111-8111-111111111111",
+  "batchId": "22222222-2222-4222-8222-222222222222",
+  "documentId": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "input": {
+    "sourceId": "spring-boot-4.1.2-reference",
+    "project": "spring-boot",
+    "exactVersion": "4.1.2",
+    "sourceType": "git-blob",
+    "documentType": "REFERENCE",
+    "required": true,
+    "applicability": "EXACT_RELEASE"
+  },
+  "url": "https://raw.githubusercontent.com/spring-projects/spring-boot/634e6fd6bc2e475d745c0bdceb8e775864f7f2ec/documentation/spring-boot-docs/src/docs/antora/modules/reference/pages/index.adoc",
+  "finalUrl": "https://raw.githubusercontent.com/spring-projects/spring-boot/634e6fd6bc2e475d745c0bdceb8e775864f7f2ec/documentation/spring-boot-docs/src/docs/antora/modules/reference/pages/index.adoc",
+  "observedAt": "2026-11-25T00:00:00Z",
+  "traceId": "11111111-1111-4111-8111-111111111111",
+  "attemptCount": 1,
+  "sourceCommit": "634e6fd6bc2e475d745c0bdceb8e775864f7f2e",
+  "versionEvidence": {
+    "level": "UNVERIFIED",
+    "method": "VERSION_PINNED_URL",
+    "exactVersion": "4.1.2",
+    "sourceUrl": "https://raw.githubusercontent.com/spring-projects/spring-boot/634e6fd6bc2e475d745c0bdceb8e775864f7f2ec/documentation/spring-boot-docs/src/docs/antora/modules/reference/pages/index.adoc",
+    "observedAt": "2026-11-25T00:00:00Z",
+    "contentHash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "selectorRuleId": "gradle-properties-version-v1"
+  },
+  "outcome": "SUCCESS",
+  "raw": {
+    "objectKey": "raw/spring-boot/4.1.2/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.txt",
+    "contentHash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "sizeBytes": 123
+  },
+  "contentType": "text/plain",
+  "httpStatus": 200,
+  "etag": null,
+  "lastModified": null,
+  "reusedFromContentHash": null,
+  "snapshotId": "33333333-3333-4333-8333-333333333333"
+}

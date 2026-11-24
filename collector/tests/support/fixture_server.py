@@ -8,6 +8,9 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+# text/plain으로 답하는 경로 끝
+TEXT_SUFFIXES = (".txt", ".properties")
+
 
 @dataclass(frozen=True)
 class Reply:
@@ -136,7 +139,7 @@ class FixtureServer:
                     return
 
                 body = reply.body if reply.body is not None else server.site.get(self.path, b"")
-                content_type = "text/plain" if self.path.endswith(".txt") else "text/html; charset=utf-8"
+                content_type = "text/plain" if self.path.endswith(TEXT_SUFFIXES) else "text/html; charset=utf-8"
                 self.send_response(reply.status)
                 self.send_header("Content-Type", content_type)
 

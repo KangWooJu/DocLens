@@ -21,6 +21,7 @@ Language-neutral contracts shared by the Python collector and the Java modules. 
 - A new example must be added to `examples/index.json`; the check fails on unlisted files.
 - Changing the meaning of a field needs a new contract version, not an edit in place.
 - Every implementation of canonical JSON or ID hashing is tested against the golden vectors.
+- `sourceType` `git-blob` is the git blob bytes of a raw URL pinned to a commit SHA, recorded with `contentType` `text/plain` and the commit in `sourceCommit`.
 
 ## ID formulas
 

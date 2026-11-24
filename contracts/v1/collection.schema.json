@@ -21,7 +21,8 @@
           "enum": [
             "html",
             "config-metadata",
-            "javadoc"
+            "javadoc",
+            "git-blob"
           ]
         },
         "documentType": {
@@ -691,7 +692,8 @@
                 "text/html",
                 "application/json",
                 "application/java-archive",
-                "application/zip"
+                "application/zip",
+                "text/plain"
               ]
             },
             "httpStatus": {
