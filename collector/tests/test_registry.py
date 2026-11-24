@@ -253,6 +253,28 @@ def test_committed_registry_file_imports_blocked(
     assert [(row["sourceId"], row["approvalState"]) for row in out] == [(SOURCE_ID, "BLOCKED")]
 
 
+def test_committed_git_registry_file_imports_two_blocked_path_lists(
+    app: App,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    path = ROOT / "registry" / "spring-boot-4.1.2.json"
+    code, out, _ = cli(
+        app,
+        capsys,
+        "registry",
+        "import",
+        path,
+    )
+    sources = json.loads(path.read_text(encoding="utf-8"))["sources"]
+
+    assert code == 0
+    assert [(row["sourceId"], row["approvalState"]) for row in out] == [
+        ("spring-boot-4.1.2-reference", "BLOCKED"),
+        ("spring-boot-4.1.2-reference-includes", "BLOCKED"),
+    ]
+    assert [len(source["allowedPathPrefixes"]) for source in sources] == [1 + 89, 862]
+
+
 def test_probe_passes_stores_entry_and_allows_approval(
     settings: Settings,
     store: ObjectStore,

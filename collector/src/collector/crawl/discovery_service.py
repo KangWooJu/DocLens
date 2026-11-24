@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from itertools import groupby
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 from collector.config import CrawlPolicy
@@ -13,7 +14,13 @@ from collector.crawl.transport_gate import Deferred, Fetch, RobotsDenied, Transp
 from collector.crawl.urls import canonical_url
 from collector.db import Conn
 from collector.job.job_model import ClaimedJob, Review
-from collector.registry.source_registry import Source
+from collector.registry.source_registry import (
+    GIT_PATH_LIST,
+    GIT_PATH_LIST_WITH_ENTRY,
+    GIT_RULES,
+    Source,
+    git_commit,
+)
 
 BATCH_SIZE = 100
 
@@ -102,7 +109,7 @@ class DiscoveryService:
         run: RunRow,
         entries: tuple[EntryPage, ...],
     ) -> None:
-        """entry nav와 entry 자신을 대상으로, (project, exactVersion, documentType)별 URL 순 100개씩 batch"""
+        """발견 규칙의 대상을 (project, exactVersion, documentType)별 URL 순 100개씩 batch"""
 
         targets: dict[str, tuple[tuple[str, str, str], NewTarget]] = {}
 
@@ -114,7 +121,7 @@ class DiscoveryService:
                     href,
                     source.scope,
                 )
-                for href in (source.entry_url, *entry.markers.nav_hrefs)
+                for href in _target_hrefs(entry)
             }
 
             for url in sorted(link for link in links if link is not None):
@@ -164,7 +171,7 @@ class DiscoveryService:
             run.run_id,
             batches,
             self._policy.attempt_cap,
-            entries[0].markers.source_tag,
+            _revision(entries[0]),
         )
 
     def _fetch_entry(
@@ -205,7 +212,7 @@ class DiscoveryService:
         if decision.markers.version != source.exact_version:
             return Review("VERSION_UNVERIFIED")
 
-        if not decision.markers.nav_hrefs:
+        if not decision.markers.nav_hrefs and source.discovery_rule_id not in GIT_RULES:
             return Review("INVALID_BODY")
 
         return EntryPage(
@@ -213,6 +220,30 @@ class DiscoveryService:
             response=decision.response,
             markers=decision.markers,
         )
+
+
+def _target_hrefs(entry: EntryPage) -> tuple[str, ...]:
+    """경로 목록 규칙은 목록 그대로(entry 제외 또는 포함), nav 규칙은 entry와 nav 링크"""
+
+    source = entry.source
+    entry_path = urlsplit(source.entry_url).path
+
+    if source.discovery_rule_id == GIT_PATH_LIST:
+        return tuple(path for path in source.scope.allowed_path_prefixes if path != entry_path)
+
+    if source.discovery_rule_id == GIT_PATH_LIST_WITH_ENTRY:
+        return source.scope.allowed_path_prefixes
+
+    return (source.entry_url, *entry.markers.nav_hrefs)
+
+
+def _revision(entry: EntryPage) -> str | None:
+    """경로 목록 규칙은 canonicalRoot의 commit, nav 규칙은 편집 링크 tag"""
+
+    if entry.source.discovery_rule_id in GIT_RULES:
+        return git_commit(entry.source.canonical_root)
+
+    return entry.markers.source_tag
 
 
 def _scope_input(source: Source) -> ScopeInput:

@@ -8,8 +8,8 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-# text/plain으로 답하는 경로 끝
-TEXT_SUFFIXES = (".txt", ".properties")
+# text/plain으로 답하는 경로 끝, 합성 git 트리 포함
+TEXT_SUFFIXES = (".txt", ".properties", ".adoc", ".java", ".kt", "/dockerfile")
 
 
 @dataclass(frozen=True)

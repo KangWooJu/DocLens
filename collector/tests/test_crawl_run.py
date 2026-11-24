@@ -19,16 +19,19 @@ from collector.contract.canonical_json import content_hash
 from collector.contract.ids import document_id
 from collector.store.object_store import ObjectStore, raw_key
 from tests.conftest import (
+    FAKE_COMMIT,
     ROOT,
     SCALED,
     approve_sources,
     connected_app,
     definition,
+    git_definition,
+    registry_file,
     run_collector_command,
     subprocess_env,
 )
 from tests.support.fixture_server import FixtureServer, Reply, serving
-from tests.support.fixture_site import site
+from tests.support.fixture_site import GIT_INCLUDES, GIT_PAGES, GIT_UNLISTED, git_base, git_tree, site
 from tests.support.loopback_connector import LoopbackConnector
 
 SOURCE_ID = "spring-boot-4.1.3-reference"
@@ -209,6 +212,8 @@ def ready_run(
         schema.validate("documentOutcome", line)
 
     return {
+        "discovery": discovery,
+        "outcomes": outcomes,
         "batches": len(discovery["batches"]),
         "targets": discovery["targetCount"],
         "raw": {line["documentId"]: line["raw"]["contentHash"] for line in outcomes if line["outcome"] == "SUCCESS"},
@@ -858,3 +863,193 @@ def test_two_collectors_without_the_lock_still_send_one_at_a_time(
     assert server.max_in_flight == 1
     assert min(server.gaps()) >= SCALED.min_interval * 0.9
     assert server.total() == sends(pg) == 1 + 2 * (1 + pages)
+
+
+GIT_REFERENCE = "spring-boot-4.1.2-reference"
+GIT_INCLUDES_ID = "spring-boot-4.1.2-reference-includes"
+GIT_BASE = git_base(FAKE_COMMIT)
+GIT_ENTRY = GIT_BASE + "gradle.properties"
+# 정의별 문서 종류와 대상 경로, include 목록은 entry도 대상
+GIT_LISTED = (
+    *(("REFERENCE", GIT_BASE + path) for path in GIT_PAGES),
+    *(("EXAMPLE", GIT_BASE + path) for path in ("gradle.properties", *GIT_INCLUDES)),
+)
+
+
+def git_definitions() -> tuple[dict[str, object], dict[str, object]]:
+    """쪽 목록 정의와 include 목록 정의, 둘 다 entry는 gradle.properties"""
+
+    return (
+        {
+            **git_definition(GIT_REFERENCE),
+            "allowedPathPrefixes": [GIT_ENTRY, *(GIT_BASE + path for path in GIT_PAGES)],
+        },
+        {
+            **git_definition(
+                GIT_INCLUDES_ID,
+                discovery_rule_id="git-path-list-with-entry-v1",
+            ),
+            "documentType": "EXAMPLE",
+            "bodySelectorRuleId": "boot-asciidoc-include-v1",
+            "allowedPathPrefixes": [GIT_ENTRY, *(GIT_BASE + path for path in GIT_INCLUDES)],
+        },
+    )
+
+
+def submit_git(
+    settings: Settings,
+    tmp_path: Path,
+) -> UUID:
+    """합성 git 트리로 import, probe와 approve 둘, input 둘인 job 접수"""
+
+    with serving(git_tree(FAKE_COMMIT)) as server, connected_app(settings, LoopbackConnector(server.port)) as app:
+        app.registry.import_file(registry_file(tmp_path, *git_definitions()))
+
+        for source_id in (GIT_REFERENCE, GIT_INCLUDES_ID):
+            assert app.registry.probe(source_id).state == "PASSED"
+            app.registry.approve(
+                source_id,
+                "tester",
+                "spring-boot-asciidoc-reference@1",
+            )
+
+        return app.jobs.submit(app.registry.draft_request([GIT_REFERENCE, GIT_INCLUDES_ID])).job_id
+
+
+def git_doc_id(
+    document_type: str,
+    path: str,
+) -> str:
+    return document_id(
+        "spring-boot",
+        "4.1.2",
+        "git-blob",
+        document_type,
+        "https://raw.githubusercontent.com" + path,
+    )
+
+
+def git_expected(tree: Mapping[str, bytes]) -> dict[str, str]:
+    """목록 대상의 documentId별 원본 hash"""
+
+    return {git_doc_id(document_type, path): content_hash(tree[path]) for document_type, path in GIT_LISTED}
+
+
+def sent_paths(pg: psycopg.Connection) -> set[str]:
+    return {
+        row[0]
+        for row in (
+            pg
+            .execute("SELECT path FROM collector.http_sends")
+            .fetchall()
+        )
+    }
+
+
+def test_git_path_list_run_collects_the_listed_blobs_at_the_commit(
+    settings: Settings,
+    tmp_path: Path,
+    pg: psycopg.Connection,
+    store: ObjectStore,
+) -> None:
+    job_id = submit_git(settings, tmp_path)
+    tree = git_tree(FAKE_COMMIT)
+
+    with serving(tree) as server:
+        code, _, err = work(
+            settings,
+            server,
+            "work",
+        )
+
+    assert code == 0, err
+    state = job(pg, job_id)
+    assert (state["state"], state["attempts"]) == ("SUCCEEDED", 1)
+    summary = ready_run(store, state)
+    assert summary["raw"] == git_expected(tree)
+    assert (summary["targets"], summary["batches"]) == (len(GIT_LISTED), 2)
+    discovery = summary["discovery"]
+    assert (discovery["discoveryMethod"], discovery["officialRevision"]) == ("EXPLICIT_ARTIFACT_LIST", FAKE_COMMIT)
+    assert {
+        (
+            line["sourceCommit"],
+            line["versionEvidence"]["method"],
+            line["versionEvidence"]["exactVersion"],
+            line["contentType"],
+            line["raw"]["objectKey"].rsplit(".", 1)[-1],
+        )
+        for line in summary["outcomes"]
+    } == {(FAKE_COMMIT, "VERSION_PINNED_URL", "4.1.2", "text/plain", "txt")}
+    counts = server.counts()
+    # entry는 input마다 발견 한 번, include 목록의 문서로 한 번
+    assert counts[GIT_ENTRY] == 3
+    assert all(counts[path] == 1 for _, path in GIT_LISTED if path != GIT_ENTRY)
+    assert sent_paths(pg) <= {"/robots.txt", *(path for _, path in GIT_LISTED)}
+    assert GIT_BASE + GIT_UNLISTED not in counts
+
+
+def test_git_entry_version_mismatch_sends_no_document(
+    settings: Settings,
+    tmp_path: Path,
+    pg: psycopg.Connection,
+) -> None:
+    job_id = submit_git(settings, tmp_path)
+
+    with serving(git_tree(FAKE_COMMIT, version="4.1.3")) as server:
+        code, _, err = work(
+            settings,
+            server,
+            "work",
+        )
+
+    assert code == 0, err
+    state = job(pg, job_id)
+    assert (state["state"], state["error"]) == ("NEEDS_REVIEW", "VERSION_UNVERIFIED")
+    assert set(server.counts()) <= {"/robots.txt", GIT_ENTRY}
+    assert (
+        pg
+        .execute("SELECT count(*) FROM collector.http_sends WHERE purpose = 'DOCUMENT'")
+        .fetchone()
+    ) == (0,)
+
+
+def test_git_run_resumes_after_a_kill_between_raw_store_and_record(
+    settings: Settings,
+    tmp_path: Path,
+    pg: psycopg.Connection,
+    store: ObjectStore,
+) -> None:
+    job_id = submit_git(settings, tmp_path)
+    tree = git_tree(FAKE_COMMIT)
+    target = GIT_BASE + GIT_PAGES[1]
+
+    with serving(tree) as server:
+        process = start(
+            settings,
+            server,
+            "--pause-key",
+            raw_key(
+                "spring-boot",
+                "4.1.2",
+                tree[target],
+                "git-blob",
+            ),
+            "--pause-after",
+            "work",
+        )
+        paused(process)
+        process.kill()
+        process.wait()
+        wait_lock_released(pg)
+        code, _, err = work(
+            settings,
+            server,
+            "work",
+        )
+
+    assert code == 0, err
+    state = job(pg, job_id)
+    assert (state["state"], state["attempts"], state["epoch"]) == ("SUCCEEDED", 2, 2)
+    assert ready_run(store, state)["raw"] == git_expected(tree)
+    assert server.counts()[target] == 2
+    assert targets(pg, job_id)[git_doc_id("REFERENCE", target)] == ("SUCCEEDED", 2, None)
