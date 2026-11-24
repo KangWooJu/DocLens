@@ -11,6 +11,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.flywaydb:flyway-database-postgresql")
     implementation(libs.jsoup)
+    implementation(libs.asciidoctorj)
     implementation(platform(libs.aws.sdk.bom))
     implementation("software.amazon.awssdk:s3")
     runtimeOnly("org.postgresql:postgresql")
@@ -37,4 +38,15 @@ tasks.named<Test>("test") {
     jvmArgumentProviders.add(CommandLineArgumentProvider {
         listOf("-Ddoclens.test.pipelineClasspath=" + testClasspath.asPath)
     })
+}
+
+tasks.named<org.springframework.boot.gradle.tasks.bundling.BootJar>("bootJar") {
+    // JRuby and AsciidoctorJ load their own jar as a file, so they must be unpacked from the fat jar.
+    requiresUnpack(
+        "**/jruby-*.jar",
+        "**/asciidoctorj-*.jar"
+    )
+
+    // A fixed name keeps CI from picking the -plain.jar.
+    archiveFileName = "pipeline.jar"
 }

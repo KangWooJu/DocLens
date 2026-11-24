@@ -4,6 +4,7 @@ sqlite-jdbc = "3.54.1.0"
 mcp-sdk = "2.1.0"
 archunit = "1.5.1"
 jsoup = "1.24.1"
+asciidoctorj = "3.0.1"
 aws-sdk = "2.59.7"
 
 [libraries]
@@ -12,6 +13,7 @@ sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version.ref = "sqlite-jdbc" }
 mcp-core = { module = "io.modelcontextprotocol.sdk:mcp-core", version.ref = "mcp-sdk" }
 mcp-json-jackson3 = { module = "io.modelcontextprotocol.sdk:mcp-json-jackson3", version.ref = "mcp-sdk" }
 jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
+asciidoctorj = { module = "org.asciidoctor:asciidoctorj", version.ref = "asciidoctorj" }
 aws-sdk-bom = { module = "software.amazon.awssdk:bom", version.ref = "aws-sdk" }
 archunit-junit5 = { module = "com.tngtech.archunit:archunit-junit5", version.ref = "archunit" }
 
