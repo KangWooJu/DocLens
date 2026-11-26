@@ -4,7 +4,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -14,15 +20,23 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
+import io.github.kangwooju.doclens.core.pack.reader.PackReader;
 import io.github.kangwooju.doclens.pipeline.collected.dto.ObjectRef;
 import io.github.kangwooju.doclens.pipeline.collected.exception.CollectedRunIncompleteException;
 import io.github.kangwooju.doclens.pipeline.pack.dto.BuildResult;
+import io.github.kangwooju.doclens.pipeline.pack.policy.ProcessingConfigPolicy;
 import io.github.kangwooju.doclens.pipeline.pack.type.BuildStatus;
+import io.github.kangwooju.doclens.pipeline.parse.ParseFixtures;
+import io.github.kangwooju.doclens.pipeline.parse.store.ParserProfileStore;
+import io.github.kangwooju.doclens.pipeline.parse.type.ApprovalState;
 import io.github.kangwooju.doclens.testsupport.CollectedRunFixtures;
 import io.github.kangwooju.doclens.testsupport.CollectedRunFixtures.Bundle;
 import io.github.kangwooju.doclens.testsupport.CollectedRunFixtures.Document;
@@ -36,10 +50,32 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 @SpringBootTest(properties = "doclens.pipeline.object-store=s3")
 @Import({
         PostgresTestConfiguration.class,
-        S3MockTestConfiguration.class
+        S3MockTestConfiguration.class,
+        CollectedBuildTests.EnabledAsciidocProfile.class
 })
 @DisplayName("S3에 올린 collector readyRun 묶음으로 Build와 Pack 업로드")
 class CollectedBuildTests {
+
+    /** AsciiDoc 프로필만 ENABLED로 바꾼 등록 프로필, 실제 표본 대조와 승인 전 시험용 */
+    @TestConfiguration(proxyBeanMethods = false)
+    static class EnabledAsciidocProfile {
+
+        // 기본 등록 순서 그대로 AsciiDoc 프로필 승인 상태만 바꾼 프로필 목록
+        @Bean
+        @Primary
+        ParserProfileStore enabledAsciidocProfileStore() {
+
+            return new ParserProfileStore(List
+                    .of(
+                            ParserProfileStore.SPRING_BOOT_REFERENCE,
+                            ParseFixtures
+                                    .withApproval(
+                                            ParserProfileStore.SPRING_BOOT_ASCIIDOC_REFERENCE,
+                                            ApprovalState.ENABLED
+                                    )
+                    ));
+        }
+    }
 
     @TempDir
     static Path objectRoot;
@@ -119,6 +155,91 @@ class CollectedBuildTests {
     }
 
     @Test
+    @DisplayName("합성 git blob readyRun은 예시를 include로 읽어 AsciiDoc 두 쪽 Build SUCCEEDED, Pack에 인용과 include 기록")
+    void buildsCollectedGitRun() throws Exception {
+
+        List<BuildResult> results = facade
+                .buildCollected(upload(CollectedRunFixtures
+                        .write(CollectedRunFixtures
+                                .gitParts(CollectedRunFixtures
+                                        .succeededGitDocuments()))));
+        BuildResult result = results
+                .getFirst();
+
+        assertEquals(
+                1,
+                results
+                        .size()
+        );
+        assertEquals(
+                BuildStatus.SUCCEEDED,
+                result
+                        .status()
+        );
+        assertEquals(
+                2,
+                jdbcClient
+                        .sql("SELECT count(*) FROM pipeline.build_sources WHERE build_id = ?")
+                        .param(result
+                                .buildId())
+                        .query(Integer.class)
+                        .single()
+        );
+
+        Path pack = objectRoot
+                .resolve("git.pack");
+        Files
+                .write(
+                        pack,
+                        s3Client
+                                .getObjectAsBytes(GetObjectRequest
+                                        .builder()
+                                        .bucket(S3MockTestConfiguration.BUCKET)
+                                        .key(result
+                                                .pack()
+                                                .objectKey())
+                                        .build())
+                                .asByteArray()
+                );
+
+        try (PackReader reader = PackReader
+                .open(pack)) {
+            assertEquals(
+                    List
+                            .of(
+                                    ParseFixtures.RAW_ROOT + ParseFixtures.PAGES + "nested/deep.adoc 0",
+                                    ParseFixtures.RAW_ROOT + ParseFixtures.PAGES + "sample.adoc 5"
+                            ),
+                    reader
+                            .query(connection -> texts(
+                                    connection,
+                                    "SELECT url || ' ' || coalesce(json_array_length(source_map_json, '$.includes'), 0) FROM documents ORDER BY url"
+                            ))
+            );
+            assertEquals(
+                    List
+                            .of("https://docs.spring.io/spring-boot/4.1/reference/nested/deep.html#deep.intro"),
+                    reader
+                            .query(connection -> texts(
+                                    connection,
+                                    "SELECT DISTINCT json_extract(m.value, '$.citation.readerUrl') FROM chunks c"
+                                            + " JOIN sections s ON s.section_id = c.section_id, json_each(c.source_map_json) m"
+                                            + " WHERE s.anchor = 'deep.intro'"
+                            ))
+            );
+            assertEquals(
+                    List
+                            .of(ProcessingConfigPolicy.SOURCE_ATTRIBUTION),
+                    reader
+                            .query(connection -> texts(
+                                    connection,
+                                    "SELECT json_extract(value, '$') FROM pack_meta WHERE key = 'sourceAttribution'"
+                            ))
+            );
+        }
+    }
+
+    @Test
     @DisplayName("필수 문서 실패가 있으면 Build 행 없이 입력 보류")
     void incompleteRunWritesNoBuild() {
 
@@ -152,6 +273,28 @@ class CollectedBuildTests {
                         .query(Integer.class)
                         .single()
         );
+    }
+
+    // 조회 결과 첫 열의 글 목록
+    private static List<String> texts(
+            Connection connection,
+            String sql
+    ) throws SQLException {
+
+        List<String> texts = new ArrayList<>();
+
+        try (PreparedStatement statement = connection
+                .prepareStatement(sql); ResultSet rows = statement
+                        .executeQuery()) {
+            while (rows
+                    .next()) {
+                texts
+                        .add(rows
+                                .getString(1));
+            }
+        }
+
+        return texts;
     }
 
     // 묶음의 객체를 모두 S3에 올리고 readyRun objectRef 반환

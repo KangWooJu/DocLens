@@ -26,8 +26,15 @@ public class ProcessingConfigPolicy {
     /** preimage 형식 이름 */
     public static final String KIND = "processing-config-v1";
 
-    /** Pack 메타 출처 표기, Pack 논리 내용이라 preimage에 포함 */
-    public static final String SOURCE_ATTRIBUTION = "Spring documentation, Apache-2.0";
+    /**
+     * Pack 메타 출처 표기, 저작권과 라이선스와 DocLens 변경과 비보증 문구, Pack 논리 내용이라 preimage에 포함
+     * 출처가 Spring Boot 하나일 때만 맞는 전역 문구, 두 번째 project가 들어오면 출처별 데이터로
+     */
+    public static final String SOURCE_ATTRIBUTION = "Spring Boot reference documentation and examples from github.com/spring-projects/spring-boot"
+            + " (each document URL pins the commit), Copyright 2012-present the original author or authors,"
+            + " licensed under the Apache License 2.0 (https://www.apache.org/licenses/LICENSE-2.0)."
+            + " Converted from AsciiDoc, split and chunked by DocLens; not affiliated with or endorsed by Broadcom."
+            + " Spring is a trademark of Broadcom Inc. and/or its subsidiaries.";
 
     /** Pack 메타 생성자, 버전을 넣지 않아 다른 프로세스가 내보내도 같은 값 */
     public static final String CREATED_BY = "doclens-pipeline";

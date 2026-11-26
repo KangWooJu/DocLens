@@ -75,23 +75,37 @@ public class BuildDigestHelper {
                 );
     }
 
-    /** 원본 메타데이터 전체의 canonical hash, 같은 작업 키에 다른 원본이 오는지 판정 */
-    public String sourceDigest(List<SourceEntry> sources) {
+    /**
+     * 원본과 include 메타데이터 전체의 canonical hash, 같은 작업 키에 다른 원본이 오는지 판정
+     * include가 없으면 원본 목록만의 값이라 include 이전 Build와 같음
+     */
+    public String sourceDigest(
+            List<SourceEntry> sources,
+            List<SourceEntry> includes
+    ) {
 
-        List<Object> entries = sources
-                .stream()
-                .sorted(Comparator
-                        .comparing(
-                                SourceEntry::documentId,
-                                CanonicalJson::compareCodePoints
-                        ))
-                .map(BuildDigestHelper::sourceMap)
-                .map(Object.class::cast)
-                .toList();
+        if (includes
+                .isEmpty()) {
+            return CanonicalJson
+                    .sha256(CanonicalJson
+                            .write(entries(sources)));
+        }
+
+        Map<String, Object> digest = new HashMap<>();
+        digest
+                .put(
+                        "sources",
+                        entries(sources)
+                );
+        digest
+                .put(
+                        "includes",
+                        entries(includes)
+                );
 
         return CanonicalJson
                 .sha256(CanonicalJson
-                        .write(entries));
+                        .write(digest));
     }
 
     /** documentId 순 [documentId, sha256] 목록의 canonical hash, 봉인과 Export가 같은 함수로 계산 */
@@ -105,6 +119,21 @@ public class BuildDigestHelper {
         return CanonicalJson
                 .sha256(CanonicalJson
                         .write(rows));
+    }
+
+    // documentId 순 원본마다 canonical 객체
+    private static List<Object> entries(List<SourceEntry> sources) {
+
+        return sources
+                .stream()
+                .sorted(Comparator
+                        .comparing(
+                                SourceEntry::documentId,
+                                CanonicalJson::compareCodePoints
+                        ))
+                .map(BuildDigestHelper::sourceMap)
+                .map(Object.class::cast)
+                .toList();
     }
 
     // 원본 하나의 canonical 객체

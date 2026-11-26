@@ -50,7 +50,7 @@ public final class PackRequestFixtures {
                 .toList();
     }
 
-    /** 원본 목록과 현재 처리 설정 hash의 요청 */
+    /** 원본 목록과 현재 처리 설정 hash의 요청, include 없음 */
     public static BuildRequest request(List<SourceEntry> sources) {
 
         return new BuildRequest(
@@ -64,7 +64,9 @@ public final class PackRequestFixtures {
                 BuildFixtures
                         .currentHash(),
                 null,
-                sources
+                sources,
+                List
+                        .of()
         );
     }
 
