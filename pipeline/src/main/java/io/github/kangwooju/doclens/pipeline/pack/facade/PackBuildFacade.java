@@ -15,7 +15,6 @@ import org.springframework.stereotype.Component;
 import io.github.kangwooju.doclens.core.pack.dto.PackDocument;
 import io.github.kangwooju.doclens.core.pack.writer.PackWriter;
 import io.github.kangwooju.doclens.pipeline.chunk.service.ChunkService;
-import io.github.kangwooju.doclens.pipeline.collected.dto.ObjectRef;
 import io.github.kangwooju.doclens.pipeline.collected.dto.ProcessRequest;
 import io.github.kangwooju.doclens.pipeline.collected.dto.ProcessingReceipt;
 import io.github.kangwooju.doclens.pipeline.collected.service.CollectedRunService;
@@ -169,26 +168,6 @@ public class PackBuildFacade {
         }
 
         return ingested;
-    }
-
-    /** collector readyRun 하나의 projection마다 build, 필수 문서 실패가 있으면 Build 없이 CollectedRunIncompleteException */
-    public List<BuildResult> buildCollected(ObjectRef readyRun) {
-
-        ProcessingConfig config = processingConfigService
-                .current(
-                        DocumentParseService.PARSER_POLICY_VERSION,
-                        ChunkService.CHUNKER_POLICY_VERSION
-                );
-
-        return collectedRunService
-                .requests(
-                        readyRun,
-                        config
-                                .hash()
-                )
-                .stream()
-                .map(this::build)
-                .toList();
     }
 
     /**
