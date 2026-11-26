@@ -1,6 +1,9 @@
 spring:
   application:
     name: pipeline
+  autoconfigure:
+    # Callers authenticate with static bearer tokens only, so no generated in-memory user
+    exclude: org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration
   config:
     # Local values: optional .env at the repository root (git-ignored).
     # Works from the repository root and from the module directory (bootRun).
@@ -24,6 +27,9 @@ management:
         include: health
 
 doclens:
+  security:
+    # Internal API callers as <caller>:<sha256 hex of the token>[,...]; empty rejects every internal call
+    caller-tokens: ${DOCLENS_CALLER_TOKENS:}
   pipeline:
     # Local object root: raw/ sources and packs/ output in local mode, the pack working directory in s3 mode
     object-root: ${DOCLENS_OBJECT_ROOT:./data}
