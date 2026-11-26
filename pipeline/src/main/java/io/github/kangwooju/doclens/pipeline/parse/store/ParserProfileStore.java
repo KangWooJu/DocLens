@@ -121,7 +121,9 @@ public class ParserProfileStore {
 
     /**
      * Spring Boot GitHub AsciiDoc Reference 프로필, 같은 commit의 include를 써서 HTML로 바꾼 뒤 HTML 프로필과 같은 선택자로 읽음
-     * 버전 근거는 문서 URL의 commit, 실제 표본 대조와 사용자 승인 전이라 CANDIDATE
+     * 버전 근거는 문서 URL의 commit
+     * 실제 표본 24개(4.1.3 12쪽, 4.1.2 12쪽)를 같은 판 live 쪽과 대조하고 독립 검사 뒤 사용자 승인
+     * fixtureHashes는 그 표본의 원본 hash, 두 판 bytes가 같은 8쪽은 한 번만
      * 생성 partial은 원본에 없어 표지 한 줄, 잔여 허용 항목은 원문 저자 실수 한 곳
      */
     public static final ParserProfile SPRING_BOOT_ASCIIDOC_REFERENCE = new ParserProfile(
@@ -139,8 +141,25 @@ public class ParserProfileStore {
                     .tabSelectors(),
             VersionMarkerRule.COMMIT_PINNED_URL,
             List
-                    .of(),
-            ApprovalState.CANDIDATE,
+                    .of(
+                            "sha256:bb4e0aabdc6e19dd086ab3a51234bb11af6c8385cbbe87fcab680f2d95757939",
+                            "sha256:9af75f39400ac618e66086670e5f44f57afcec242f43b8a302549aae37edd7c6",
+                            "sha256:977cf3fc0a2ad3f9493ec67e854acbeebb92211bcec4e964c858b6613d7b1e5a",
+                            "sha256:29ad818a12e042a013607e76055919c5c2c41a32aec5d806faa478bf378d9050",
+                            "sha256:b856d4bf173c42208c29e51d05de77507e54ed6b9be4bd3ee808dd76f0e5b1e5",
+                            "sha256:474ce651b7c052990c481309eae4c2b5b800d8f0f7db022c0171af7e2c1b7b4e",
+                            "sha256:04dfd63e9da52f4f74913158e3b1cd31ca6c634ad7deffd465555d336b9e878a",
+                            "sha256:d95db9e5f6e47ad5489a088d5a40a8e762b8506d8a1c52b26d6b3d60f5b23d0b",
+                            "sha256:90ba4998126faef910f5cf0b46141c6d34c6764b8520a1d0284f459a51f9874a",
+                            "sha256:4f883a716affc8098eb4d5539e5dbdfe37e71a7d463823dcb5a400b89c6a74e6",
+                            "sha256:6880a855e84ce515ef692d626b629f82d6373d4cbaf0e732ca3217b6982b1da3",
+                            "sha256:651902e5735ce77f32d24808ae7ee95dbb90ca99780db0096852231a492c0028",
+                            "sha256:c29a4e1d7a946d6dce7e7770ce848bbb3ff0649221dddfcab7f0ea743d2b0ee0",
+                            "sha256:c2abfb0e59e211f73b989cf96ea0f9a91fca11af1d16b8eccfdffb824c8f6b02",
+                            "sha256:815f9fc63af0be0e9737dce1f091bfd74c836eab9cf7f565fad53dbb24d836bc",
+                            "sha256:e05598b0083e3c15f850ac52b3655af90334c041b5b72e75a0548e96a951d23e"
+                    ),
+            ApprovalState.ENABLED,
             SPRING_BOOT_REFERENCE
                     .defaultTabRule(),
             SPRING_BOOT_REFERENCE

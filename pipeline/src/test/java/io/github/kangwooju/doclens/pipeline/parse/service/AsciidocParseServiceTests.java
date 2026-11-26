@@ -676,6 +676,35 @@ class AsciidocParseServiceTests {
     }
 
     @Test
+    @DisplayName("기본 등록 AsciiDoc 프로필은 승인 상태라 보류 없이 파싱")
+    void defaultProfileIsEnabled() {
+
+        assertEquals(
+                ApprovalState.ENABLED,
+                ParserProfileStore.SPRING_BOOT_ASCIIDOC_REFERENCE
+                        .approvalState()
+        );
+        assertEquals(
+                16,
+                Set
+                        .copyOf(ParserProfileStore.SPRING_BOOT_ASCIIDOC_REFERENCE
+                                .fixtureHashes())
+                        .size()
+        );
+        assertEquals(
+                "Sample Guide",
+                ParseFixtures
+                        .service(ParserProfileStore.SPRING_BOOT_ASCIIDOC_REFERENCE)
+                        .parse(
+                                ParseFixtures
+                                        .asciidocPage("sample.adoc"),
+                                INCLUDES
+                        )
+                        .title()
+        );
+    }
+
+    @Test
     @DisplayName("같은 잔여가 허용 목록에 있으면 통과, CANDIDATE 프로필은 보류")
     void allowsListedResidueAndHoldsCandidate() {
 
@@ -724,7 +753,11 @@ class AsciidocParseServiceTests {
                 HoldReason.SELECTOR_UNVERIFIED,
                 hold(
                         ParseFixtures
-                                .service(ParserProfileStore.SPRING_BOOT_ASCIIDOC_REFERENCE),
+                                .service(ParseFixtures
+                                        .withApproval(
+                                                ParserProfileStore.SPRING_BOOT_ASCIIDOC_REFERENCE,
+                                                ApprovalState.CANDIDATE
+                                        )),
                         "sample.adoc",
                         INCLUDES
                 )

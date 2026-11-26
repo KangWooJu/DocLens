@@ -78,19 +78,22 @@ This synthetic page {title} is written by the test fixture and is not a real doc
 
 include-code::MyApplication[]
 """
-# 합성 git 트리의 저장소 경로, 쪽과 include
+# 합성 git 트리의 저장소 경로, 쪽과 include, Spring Boot 문서 저장소 배치와 같아 AsciiDoc 프로필이 읽음
+GIT_DOCS = "documentation/spring-boot-docs/src/"
+GIT_PAGES_ROOT = GIT_DOCS + "docs/antora/modules/reference/pages/"
 GIT_PAGES = (
-    "docs/antora/pages/index.adoc",
-    "docs/antora/pages/web/servlet.adoc",
-    "docs/antora/pages/data/sql.adoc",
+    GIT_PAGES_ROOT + "index.adoc",
+    GIT_PAGES_ROOT + "web/servlet.adoc",
+    GIT_PAGES_ROOT + "data/sql.adoc",
 )
+# include-code::MyApplication[]은 섹션 id overview의 예시 파일
 GIT_INCLUDES = (
-    "docs/src/main/java/example/MyApplication.java",
-    "docs/src/main/kotlin/example/MyApplication.kt",
-    "docs/antora/partials/dockerfile",
+    GIT_DOCS + "main/java/org/springframework/boot/docs/overview/MyApplication.java",
+    GIT_DOCS + "main/kotlin/org/springframework/boot/docs/overview/MyApplication.kt",
+    GIT_DOCS + "docs/antora/modules/reference/partials/dockerfile",
 )
 # 목록에 없는 파일, 송신되면 안 됨
-GIT_UNLISTED = "docs/antora/pages/unlisted.adoc"
+GIT_UNLISTED = GIT_PAGES_ROOT + "unlisted.adoc"
 
 
 def git_base(commit: str) -> str:
