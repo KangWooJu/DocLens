@@ -20,8 +20,10 @@ import org.springframework.stereotype.Service;
 import io.github.kangwooju.doclens.core.json.CanonicalJson;
 import io.github.kangwooju.doclens.core.pack.type.DocumentType;
 import io.github.kangwooju.doclens.pipeline.collected.dto.ObjectRef;
+import io.github.kangwooju.doclens.pipeline.collected.dto.ProcessRequest;
 import io.github.kangwooju.doclens.pipeline.collected.exception.CollectedRunIncompleteException;
 import io.github.kangwooju.doclens.pipeline.collected.exception.CollectedRunInvalidException;
+import io.github.kangwooju.doclens.pipeline.collected.exception.ProcessRequestInvalidException;
 import io.github.kangwooju.doclens.pipeline.global.id.IdHash;
 import io.github.kangwooju.doclens.pipeline.global.store.ObjectStore;
 import io.github.kangwooju.doclens.pipeline.pack.dto.BuildRequest;
@@ -30,6 +32,9 @@ import lombok.RequiredArgsConstructor;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.IntNode;
+import tools.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.node.StringNode;
 
 /**
  * collector readyRun 하나를 pipeline Build 요청으로, 참조 manifest의 hash, 크기, 집합, 개수를 모두 검증
@@ -73,13 +78,111 @@ public class CollectedRunService {
     private final ObjectStore objectStore;
     private final JsonMapper jsonMapper;
 
+    /**
+     * 처리 요청 본문의 형식과 지원 범위 확인, 어긋나면 ProcessRequestInvalidException
+     * 지금은 AUTO 하나의 projection과 정수 기대 발행 번호만 받음, 여러 projection과 다른 활성화 방식은 활성화 단계와 함께
+     */
+    public ProcessRequest processRequest(String body) {
+
+        JsonNode request;
+
+        try {
+            request = jsonMapper
+                    .readTree(body);
+        } catch (JacksonException exception) {
+            throw new ProcessRequestInvalidException(
+                    "body",
+                    "not JSON: " + exception
+                            .getOriginalMessage()
+            );
+        }
+
+        if (request == null || !request
+                .isObject()) {
+            throw new ProcessRequestInvalidException(
+                    "body",
+                    "a JSON object is required"
+            );
+        }
+
+        requireValue(
+                request,
+                "schemaVersion",
+                IntNode
+                        .valueOf(1)
+        );
+        requireValue(
+                request,
+                "activationMode",
+                StringNode
+                        .valueOf("AUTO")
+        );
+
+        JsonNode projections = request
+                .get("projections");
+
+        if (projections == null || !projections
+                .isArray() || projections
+                        .size() != 1 || !projections
+                                .get(0)
+                                .isObject()) {
+            throw new ProcessRequestInvalidException(
+                    "projections",
+                    "exactly one projection object is required"
+            );
+        }
+
+        JsonNode expected = projections
+                .get(0)
+                .get("expectedPublicationSequence");
+
+        if (expected == null || !expected
+                .isIntegralNumber() || !expected
+                        .canConvertToLong() || expected
+                                .longValue() < 0) {
+            throw new ProcessRequestInvalidException(
+                    "expectedPublicationSequence",
+                    "a non-negative integer is required"
+            );
+        }
+
+        return new ProcessRequest(
+                requiredText(
+                        request,
+                        "readyRunId"
+                ),
+                requiredText(
+                        request,
+                        "processingConfigHash"
+                ),
+                expected
+                        .longValue(),
+                request
+        );
+    }
+
     /** projection마다 BuildRequest 하나, 필수 문서 실패가 있으면 CollectedRunIncompleteException */
     public List<BuildRequest> requests(
             ObjectRef readyRun,
             String processingConfigHash
     ) {
 
-        JsonNode ready = json(readyRun);
+        return requests(
+                json(readyRun),
+                processingConfigHash
+        );
+    }
+
+    /**
+     * 이미 읽은 readyRun 또는 같은 필드를 담은 처리 요청 본문으로 projection마다 BuildRequest 하나
+     * 처리 요청이 projection에 더한 기대 발행 번호와 승인 ID는 discovery와 비교하기 전에 뗌
+     */
+    public List<BuildRequest> requests(
+            JsonNode readyRun,
+            String processingConfigHash
+    ) {
+
+        JsonNode ready = withoutProcessFields(readyRun);
         ObjectRef discoveryRef = ref(
                 ready,
                 "discovery"
@@ -190,6 +293,75 @@ public class CollectedRunService {
         }
 
         return requests;
+    }
+
+    // 처리 요청 필드를 뗀 readyRun 사본, 원본 노드는 바꾸지 않음
+    private static JsonNode withoutProcessFields(JsonNode readyRun) {
+
+        if (readyRun == null || !readyRun
+                .isObject()) {
+            throw new CollectedRunInvalidException(
+                    "readyRun",
+                    "object is required"
+            );
+        }
+
+        ObjectNode ready = (ObjectNode) readyRun
+                .deepCopy();
+
+        for (JsonNode projection : array(
+                ready,
+                "projections"
+        )) {
+            if (projection instanceof ObjectNode fields) {
+                fields
+                        .remove("expectedPublicationSequence");
+                fields
+                        .remove("activationApprovalId");
+            }
+        }
+
+        return ready;
+    }
+
+    // 처리 요청 필드가 정해진 값이어야 통과
+    private static void requireValue(
+            JsonNode request,
+            String field,
+            JsonNode expected
+    ) {
+
+        if (!expected
+                .equals(request
+                        .get(field))) {
+            throw new ProcessRequestInvalidException(
+                    field,
+                    "must be " + expected
+            );
+        }
+    }
+
+    // 처리 요청의 비지 않은 문자열 필드
+    private static String requiredText(
+            JsonNode request,
+            String field
+    ) {
+
+        JsonNode value = request
+                .get(field);
+
+        if (value == null || !value
+                .isString() || value
+                        .stringValue()
+                        .isEmpty()) {
+            throw new ProcessRequestInvalidException(
+                    field,
+                    "a non-empty string is required"
+            );
+        }
+
+        return value
+                .stringValue();
     }
 
     // envelope 하나의 outcome 줄, batch targetList와 집합, 개수, run 식별자 대조
