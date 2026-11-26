@@ -1,6 +1,7 @@
-"""끝-끝 수집: 실제 registry 파일의 git 정의로 loopback 합성 git 트리를 CLI 경로로 받고 마지막 줄에 readyRun objectRef
+"""로컬 스택 끝-끝의 host 쪽: 합성 registry 승인과 요청 틀, loopback 합성 git 트리를 받는 상주 worker
 
-python -m tests.support.e2e_crawl
+python -m tests.support.e2e_stack prepare > ../.local/collection-request.json
+python -m tests.support.e2e_stack work
 """
 
 import contextlib
@@ -62,20 +63,20 @@ def command(
     return [json.loads(line) for line in out.getvalue().splitlines()]
 
 
-def run() -> int:
-    settings = Settings.from_env()
+def prepare(directory: Path) -> dict[str, object]:
+    """합성 registry import, probe, approve 뒤 collectionRequest, CLI 출력은 stderr로"""
 
-    with tempfile.TemporaryDirectory() as directory:
-        registry, source_ids, commit = synthetic_registry(Path(directory))
+    registry, source_ids, commit = synthetic_registry(directory)
 
-        with serving(git_tree(commit)) as server:
-            app = build_app(
-                settings,
-                LoopbackConnector(server.port),
-                policy=policy(None),
-            )
+    with serving(git_tree(commit)) as server:
+        app = build_app(
+            Settings.from_env(),
+            LoopbackConnector(server.port),
+            policy=policy(None),
+        )
 
-            try:
+        try:
+            with contextlib.redirect_stdout(sys.stderr):
                 command(
                     app,
                     "registry",
@@ -103,46 +104,53 @@ def run() -> int:
                         PARSER_PROFILE,
                     )
 
-                request = command(
+                return command(
                     app,
                     "request",
                     *source_ids,
                 )[0]
-                path = Path(directory) / "request.json"
-                path.write_text(json.dumps(request), encoding="utf-8")
-                job_id = str(
-                    command(
-                        app,
-                        "submit",
-                        path,
-                    )[0]["jobId"],
-                )
-                command(
-                    app,
-                    "work",
-                    "--max-wait",
-                    "600",
-                )
-                status = command(
-                    app,
-                    "status",
-                    job_id,
-                )[0]
-            finally:
-                app.close()
+        finally:
+            app.close()
 
-    if status["state"] != "SUCCEEDED" or status["result"] is None:
-        raise SystemExit(f"job {job_id} ended in {status['state']}")
 
-    print(
-        json.dumps(
-            status["result"],
-            sort_keys=True,
-        ),
-        flush=True,
-    )
+def work(directory: Path) -> int:
+    """종료 신호까지 접수된 job을 loopback 합성 git 트리에서 수집"""
+
+    _, _, commit = synthetic_registry(directory)
+
+    with serving(git_tree(commit)) as server:
+        app = build_app(
+            Settings.from_env(),
+            LoopbackConnector(server.port),
+            policy=policy(None),
+        )
+
+        try:
+            command(
+                app,
+                "work",
+                "--serve",
+            )
+        finally:
+            app.close()
+
+    return 0
+
+
+def run(argv: list[str]) -> int:
+    if argv not in (["prepare"], ["work"]):
+        print("usage: python -m tests.support.e2e_stack prepare|work", file=sys.stderr)
+        return 2
+
+    with tempfile.TemporaryDirectory() as directory:
+        if argv == ["work"]:
+            return work(Path(directory))
+
+        request = prepare(Path(directory))
+
+    print(json.dumps(request), flush=True)
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(run())
+    sys.exit(run(sys.argv[1:]))

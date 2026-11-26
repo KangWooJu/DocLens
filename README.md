@@ -121,6 +121,37 @@ cd collector && uv sync && uv run pytest
 uv run --no-project --python 3.13 --with jsonschema==4.26.0 python tools/check_contracts.py
 ```
 
+## Run the local stack
+
+Requires Docker with Compose. Copy `.env.example` to `.env` and fill in the collector and S3 values; everything below runs from the repository root.
+
+1. Tokens: run this once for `scheduler` and once for `operator`. Put the first line of the scheduler run in `.env` as `DOCLENS_SCHEDULER_TOKEN`, keep the operator one in your shell as `DOCLENS_OPERATOR_TOKEN`, and set `DOCLENS_CALLER_TOKENS=scheduler:<hash>,operator:<hash>` from the second lines.
+
+   ```bash
+   python3 -c "import secrets,hashlib;t=secrets.token_urlsafe(32);print(t);print(hashlib.sha256(t.encode()).hexdigest())"
+   ```
+
+2. Request template, after approving the sources with `registry import`, `probe` and `approve`:
+
+   ```bash
+   mkdir -p .local && (cd collector && uv run python -m collector request <sourceId>...) > .local/collection-request.json
+   ```
+
+3. Start, then copy the `sha256:…` from `docker compose logs pipeline | grep 'processing config'` into `.env` as `DOCLENS_SCHEDULER_PROCESSING_CONFIG_HASH` and restart the scheduler (`docker compose --profile app up -d scheduler`):
+
+   ```bash
+   ./gradlew :pipeline:bootJar :scheduler-server:bootJar
+   docker compose --profile app --profile worker up -d --wait
+   ```
+
+4. Collect now (prints `{"result":"CREATED|DUPLICATE_SLOT|ACTIVE_RUN_EXISTS","runId":…}`):
+
+   ```bash
+   docker compose run --rm scheduler --spring.profiles.active=command collect-now <label>
+   ```
+
+The pipeline and scheduler containers run the jars in `pipeline/build/libs` and `scheduler-server/build/libs`. Do not rebuild them while the stack runs; stop it first with `docker compose --profile app --profile worker down`.
+
 ## License
 
 [MIT](LICENSE)

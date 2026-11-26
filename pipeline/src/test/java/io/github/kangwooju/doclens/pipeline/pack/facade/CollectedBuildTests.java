@@ -13,6 +13,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -26,8 +27,8 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
 import io.github.kangwooju.doclens.core.pack.reader.PackReader;
-import io.github.kangwooju.doclens.pipeline.collected.dto.ObjectRef;
 import io.github.kangwooju.doclens.pipeline.collected.exception.CollectedRunIncompleteException;
+import io.github.kangwooju.doclens.pipeline.pack.BuildFixtures;
 import io.github.kangwooju.doclens.pipeline.pack.dto.BuildResult;
 import io.github.kangwooju.doclens.pipeline.pack.policy.ProcessingConfigPolicy;
 import io.github.kangwooju.doclens.pipeline.pack.type.BuildStatus;
@@ -39,15 +40,18 @@ import io.github.kangwooju.doclens.testsupport.PostgresTestConfiguration;
 import io.github.kangwooju.doclens.testsupport.S3MockTestConfiguration;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.S3Object;
 
 @SpringBootTest(properties = "doclens.pipeline.object-store=s3")
 @Import({
         PostgresTestConfiguration.class,
         S3MockTestConfiguration.class
 })
-@DisplayName("S3에 올린 collector readyRun 묶음으로 Build와 Pack 업로드")
+@DisplayName("S3에 올린 collector readyRun 묶음의 processRequest로 Build와 Pack 업로드")
 class CollectedBuildTests {
 
     @TempDir
@@ -74,31 +78,37 @@ class CollectedBuildTests {
                 );
     }
 
-    // 시험마다 Build 표 비움
+    // 시험마다 Build 표와 이전 시험의 발행 manifest 비움, 발행 번호가 다시 1부터라서
     @BeforeEach
     void truncate() {
 
         jdbcClient
                 .sql("TRUNCATE pipeline.builds CASCADE")
                 .update();
+
+        for (S3Object object : s3Client
+                .listObjectsV2(ListObjectsV2Request
+                        .builder()
+                        .bucket(S3MockTestConfiguration.BUCKET)
+                        .prefix("packs/spring-boot-4.1.2/publications/")
+                        .build())
+                .contents()) {
+            s3Client
+                    .deleteObject(DeleteObjectRequest
+                            .builder()
+                            .bucket(S3MockTestConfiguration.BUCKET)
+                            .key(object
+                                    .key())
+                            .build());
+        }
     }
 
     @Test
-    @DisplayName("합성 fixture readyRun을 buildCollected하면 SUCCEEDED, Pack이 S3 packs 경로에 같은 checksum으로 있음")
+    @DisplayName("합성 fixture readyRun을 processRequest로 처리하면 SUCCEEDED, Pack이 S3 packs 경로에 같은 checksum으로 있음")
     void buildsCollectedRun() {
 
-        List<BuildResult> results = facade
-                .buildCollected(upload(CollectedRunFixtures
-                        .bundle()));
-
-        assertEquals(
-                1,
-                results
-                        .size()
-        );
-
-        BuildResult result = results
-                .getFirst();
+        BuildResult result = process(CollectedRunFixtures
+                .bundle());
 
         assertEquals(
                 BuildStatus.SUCCEEDED,
@@ -131,19 +141,11 @@ class CollectedBuildTests {
     @DisplayName("합성 git blob readyRun은 예시를 include로 읽어 AsciiDoc 두 쪽 Build SUCCEEDED, Pack에 인용과 include, xref 제목 준 쪽 기록")
     void buildsCollectedGitRun() throws Exception {
 
-        List<BuildResult> results = facade
-                .buildCollected(upload(CollectedRunFixtures
-                        .write(CollectedRunFixtures
-                                .gitParts(CollectedRunFixtures
-                                        .succeededGitDocuments()))));
-        BuildResult result = results
-                .getFirst();
+        BuildResult result = process(CollectedRunFixtures
+                .write(CollectedRunFixtures
+                        .gitParts(CollectedRunFixtures
+                                .succeededGitDocuments())));
 
-        assertEquals(
-                1,
-                results
-                        .size()
-        );
         assertEquals(
                 BuildStatus.SUCCEEDED,
                 result
@@ -228,7 +230,7 @@ class CollectedBuildTests {
     @DisplayName("필수 문서 실패가 있으면 Build 행 없이 입력 보류")
     void incompleteRunWritesNoBuild() {
 
-        ObjectRef readyRun = upload(CollectedRunFixtures
+        Bundle bundle = upload(CollectedRunFixtures
                 .write(CollectedRunFixtures
                         .parts(List
                                 .of(
@@ -249,7 +251,7 @@ class CollectedBuildTests {
         assertThrows(
                 CollectedRunIncompleteException.class,
                 () -> facade
-                        .buildCollected(readyRun)
+                        .process(processRequest(bundle))
         );
         assertEquals(
                 0,
@@ -282,8 +284,33 @@ class CollectedBuildTests {
         return texts;
     }
 
-    // 묶음의 객체를 모두 S3에 올리고 readyRun objectRef 반환
-    private ObjectRef upload(Bundle bundle) {
+    // 묶음을 S3에 올려 processRequest로 처리한 뒤 그 Build의 결과
+    private BuildResult process(Bundle bundle) {
+
+        UUID buildId = facade
+                .process(processRequest(upload(bundle)))
+                .projectionResults()
+                .getFirst()
+                .buildId();
+
+        return facade
+                .export(buildId);
+    }
+
+    // 현재 처리 설정 hash와 첫 발행 번호의 processRequest
+    private static String processRequest(Bundle bundle) {
+
+        return CollectedRunFixtures
+                .processRequest(
+                        bundle,
+                        BuildFixtures
+                                .currentHash(),
+                        0
+                );
+    }
+
+    // 묶음의 객체를 모두 S3에 올리고 묶음 그대로 반환
+    private Bundle upload(Bundle bundle) {
 
         for (Map.Entry<String, byte[]> object : bundle
                 .objects()
@@ -302,7 +329,6 @@ class CollectedBuildTests {
                     );
         }
 
-        return bundle
-                .readyRun();
+        return bundle;
     }
 }
