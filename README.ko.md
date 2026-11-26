@@ -152,6 +152,27 @@ Docker와 Compose가 필요합니다. `.env.example`을 `.env`로 복사해 coll
 
 pipeline과 scheduler 컨테이너는 `pipeline/build/libs`, `scheduler-server/build/libs`의 jar를 그대로 실행합니다. 스택이 도는 동안 jar를 다시 빌드하지 말고, 먼저 `docker compose --profile app --profile worker down`으로 내립니다.
 
+## Phase 1 측정
+
+2026-11-27(KST) 실제 실행 1회: Spring Boot `v4.1.2` reference 문서(commit `634e6fd`)를 collector가 GitHub에서 받고 pipeline jar가 Build했습니다. 값은 모두 이 한 번의 실행에서 나왔습니다.
+
+| 항목 | 값 |
+|---|---|
+| 요청 수 / 수집 시간 | 956(문서 951, discovery 4, robots 1) / 45분 47초 |
+| 받은 파일 수 / bytes | 951 / 1,451,750 B |
+| ready run 크기 | 350,325 B |
+| `INVALID_BODY` | 0 |
+| 문서 수(DONE / HELD) | 89(89 / 0) |
+| 섹션 수 | 714 |
+| 청크 수 | 710 |
+| Pack 크기 | 8,216,576 B(약 7.84 MiB) |
+| Build 시간 | 13.3초, JVM 포함(Build 시작부터 내보내기까지 10.3초) |
+| `pack_meta`와 Build 행 일치 | 같음 |
+| 처리 설정 hash | `sha256:c1acd88a783105b173d11f0ee4d0c9e384f7e32d82dbedf9bcdd9654b1dcb6e6` |
+| 발행 번호 / 최신 `buildId` | 1 / `7f889261-d773-4d86-9df6-76cf42b79010` |
+
+Build 시간이 처리 요청 read timeout 120초보다 한참 짧아 timeout은 바꾸지 않았습니다.
+
 ## 라이선스
 
 [MIT](LICENSE)

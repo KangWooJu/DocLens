@@ -152,6 +152,27 @@ Requires Docker with Compose. Copy `.env.example` to `.env` and fill in the coll
 
 The pipeline and scheduler containers run the jars in `pipeline/build/libs` and `scheduler-server/build/libs`. Do not rebuild them while the stack runs; stop it first with `docker compose --profile app --profile worker down`.
 
+## Phase 1 measurement
+
+One real run on 2026-11-27 (KST): Spring Boot `v4.1.2` reference docs at commit `634e6fd`, fetched from GitHub by the collector and built by the pipeline jar. The values come from that single run.
+
+| Item | Value |
+|---|---|
+| Requests / collection time | 956 (951 documents, 4 discovery, 1 robots) / 45 min 47 s |
+| Files fetched / bytes | 951 / 1,451,750 B |
+| Ready run size | 350,325 B |
+| `INVALID_BODY` | 0 |
+| Documents (DONE / HELD) | 89 (89 / 0) |
+| Sections | 714 |
+| Chunks | 710 |
+| Pack size | 8,216,576 B (about 7.84 MiB) |
+| Build time | 13.3 s, JVM included (10.3 s from Build start to export) |
+| `pack_meta` matches the Build row | Yes |
+| Processing config hash | `sha256:c1acd88a783105b173d11f0ee4d0c9e384f7e32d82dbedf9bcdd9654b1dcb6e6` |
+| Publication / latest `buildId` | 1 / `7f889261-d773-4d86-9df6-76cf42b79010` |
+
+The Build stays well under the 120 s processing read timeout, so the timeout is unchanged.
+
 ## License
 
 [MIT](LICENSE)
