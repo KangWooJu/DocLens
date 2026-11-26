@@ -4,12 +4,20 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 
 import psycopg
+from psycopg import errors
 from psycopg.rows import TupleRow
 from psycopg_pool import ConnectionPool
 
 from collector.config import CrawlPolicy, Settings
 
 Conn = psycopg.Connection[TupleRow]
+
+# DB 연결 끊김, PG 재시작, 서버 측 TX 시간 초과
+DB_ERRORS = (
+    psycopg.OperationalError,
+    errors.IdleInTransactionSessionTimeout,
+    errors.TransactionTimeout,
+)
 
 WORKER_LOCK = "SELECT pg_try_advisory_lock(hashtext('collector-worker'))"
 

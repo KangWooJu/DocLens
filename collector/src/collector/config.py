@@ -15,6 +15,8 @@ class Settings:
     s3_bucket: str
     s3_access_key: str
     s3_secret_key: str
+    # 호출자 토큰 hash 목록 원문, 형식 검사는 api 명령에서만
+    caller_tokens: str = ""
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] = os.environ) -> "Settings":
@@ -30,6 +32,7 @@ class Settings:
             s3_bucket=env.get("DOCLENS_S3_BUCKET", ""),
             s3_access_key=env.get("DOCLENS_S3_ACCESS_KEY", ""),
             s3_secret_key=env.get("DOCLENS_S3_SECRET_KEY", ""),
+            caller_tokens=env.get("DOCLENS_CALLER_TOKENS", ""),
         )
 
 

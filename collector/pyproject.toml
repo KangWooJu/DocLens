@@ -5,15 +5,18 @@ description = "DocLens document collector"
 requires-python = ">=3.13"
 dependencies = [
     "boto3==1.44.9",
+    "fastapi>=0.164,<0.166",
     "jsonschema==4.26.0",
     "protego==0.7.0",
     "psycopg-pool==3.3.3",
     "psycopg[binary]==3.3.9",
     "urllib3>=2.3,<3",
+    "uvicorn>=0.54,<0.55",
 ]
 
 [dependency-groups]
 dev = [
+    "httpx2==2.16.2",
     "pytest",
     "ruff",
     "testcontainers==4.15.0",

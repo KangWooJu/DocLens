@@ -261,8 +261,8 @@ class JobRepository:
         self,
         conn: Conn,
         request_id: UUID,
-    ) -> tuple[UUID, str, str, datetime]:
-        row = (
+    ) -> tuple[UUID, str, str, datetime] | None:
+        return (
             conn
             .execute(
                 SELECT_JOB_BY_REQUEST,
@@ -270,11 +270,6 @@ class JobRepository:
             )
             .fetchone()
         )
-
-        if row is None:
-            raise LookupError(request_id)
-
-        return row
 
     def status(
         self,

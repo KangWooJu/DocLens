@@ -123,7 +123,7 @@ class JobService:
         conn: Conn,
         request: CollectionRequest,
     ) -> Accept:
-        """registry 대조 뒤 requestId 멱등 삽입, 같은 id 다른 본문은 ID_INPUT_CONFLICT"""
+        """requestId 재생이 registry 대조보다 먼저, 같은 id 다른 본문은 ID_INPUT_CONFLICT, 새 id만 대조 뒤 삽입"""
 
         request_id = UUID(request.request_id)
         trace_id = UUID(request.trace_id)
@@ -136,6 +136,55 @@ class JobService:
                 trace_id=trace_id,
             )
 
+        body = request.to_json()
+        request_hash = content_hash(canonical_bytes(body))
+        existing = self._repository.by_request(conn, request_id)
+        inserted = False
+
+        if existing is None:
+            self._check_registry(
+                conn,
+                request,
+                request_id,
+                trace_id,
+            )
+            inserted = self._repository.insert(
+                conn,
+                job_id=uuid4(),
+                request_id=request_id,
+                request_hash=request_hash,
+                body=body,
+            )
+            # 동시 접수가 먼저 넣은 행도 여기서 읽음
+            existing = self._repository.by_request(conn, request_id)
+            assert existing is not None
+
+        job_id, stored_hash, state, created_at = existing
+
+        if stored_hash != request_hash:
+            raise RequestRejected(
+                "ID_INPUT_CONFLICT",
+                "requestId was accepted with a different body",
+                request_id=request_id,
+                trace_id=trace_id,
+            )
+
+        return Accept(
+            request_id=request.request_id,
+            job_id=job_id,
+            request_hash=request_hash,
+            state=state,
+            duplicate=not inserted,
+            accepted_at=created_at,
+        )
+
+    def _check_registry(
+        self,
+        conn: Conn,
+        request: CollectionRequest,
+        request_id: UUID,
+        trace_id: UUID,
+    ) -> None:
         approved = self._registry.approved(conn)
 
         if request.source_registry_hash != registry_hash(approved):
@@ -155,34 +204,6 @@ class JobService:
                 request_id=request_id,
                 trace_id=trace_id,
             )
-
-        body = request.to_json()
-        request_hash = content_hash(canonical_bytes(body))
-        inserted = self._repository.insert(
-            conn,
-            job_id=uuid4(),
-            request_id=request_id,
-            request_hash=request_hash,
-            body=body,
-        )
-        job_id, stored_hash, state, created_at = self._repository.by_request(conn, request_id)
-
-        if stored_hash != request_hash:
-            raise RequestRejected(
-                "ID_INPUT_CONFLICT",
-                "requestId was accepted with a different body",
-                request_id=request_id,
-                trace_id=trace_id,
-            )
-
-        return Accept(
-            request_id=request.request_id,
-            job_id=job_id,
-            request_hash=request_hash,
-            state=state,
-            duplicate=not inserted,
-            accepted_at=created_at,
-        )
 
     def status(
         self,

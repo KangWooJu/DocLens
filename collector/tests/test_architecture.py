@@ -59,6 +59,10 @@ def violations(
     if is_service and any(other.endswith("_service") for other in names):
         found.append("service imports another service")
 
+    # HTTP 진입부는 App의 Facade만 부름
+    if path == "api.py" and any(other.endswith(("_service", "_repository")) for other in names):
+        found.append("api imports a service or repository")
+
     allowed_postgres = is_facade or name.endswith("_repository.py") or path in ("db.py", GATE, "worker.py")
     if uses(names, POSTGRES) and not allowed_postgres:
         found.append("psycopg import outside facade, repository, db, gate, worker")
@@ -90,6 +94,10 @@ def test_service_may_use_connection_alias() -> None:
         ("job/job_service.py", "def f(conn):\n    with conn.transaction():\n        pass\n"),
         ("crawl/fetch_service.py", "import urllib3\n"),
         ("job/job_repository.py", "import boto3\n"),
+        ("api.py", "from collector.job.job_service import JobService\n"),
+        ("api.py", "from collector.job.job_repository import JobRepository\n"),
+        ("api.py", "import psycopg\n"),
+        ("api.py", "def f(conn):\n    with conn.transaction():\n        pass\n"),
     ],
 )
 def test_rule_violations_are_found(

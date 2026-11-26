@@ -51,4 +51,9 @@ def test_settings_need_database_url() -> None:
 
     settings = Settings.from_env({"COLLECTOR_DB_URL": "postgresql://localhost/doclens"})
 
-    assert settings.contact == ""
+    assert (settings.contact, settings.caller_tokens) == ("", "")
+
+    # 형식 검사는 api 명령에서만
+    tokens = Settings.from_env({"COLLECTOR_DB_URL": "postgresql://localhost/doclens", "DOCLENS_CALLER_TOKENS": "bad"})
+
+    assert tokens.caller_tokens == "bad"
