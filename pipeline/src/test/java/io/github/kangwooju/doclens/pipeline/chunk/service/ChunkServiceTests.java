@@ -726,7 +726,7 @@ class ChunkServiceTests {
         }
 
         assertEquals(
-                "chunker-v3-jdk21",
+                "chunker-v4-jdk21",
                 ChunkService.CHUNKER_POLICY_VERSION
         );
     }

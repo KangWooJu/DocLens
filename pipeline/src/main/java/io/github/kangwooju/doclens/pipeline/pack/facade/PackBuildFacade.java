@@ -1,5 +1,6 @@
 package io.github.kangwooju.doclens.pipeline.pack.facade;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -128,7 +129,7 @@ public class PackBuildFacade {
 
     /**
      * Build 시작 또는 재개, 산출물 없는 문서만 PARSE와 CHUNK, 모두 있으면 봉인
-     * 남은 문서가 있으면 include를 먼저 모두 읽고 하나라도 객체가 없으면 어떤 문서도 파싱하지 않고 RUNNING 그대로 반환
+     * 남은 문서가 있으면 include와 xref 제목 재료인 AsciiDoc 쪽을 먼저 모두 읽고 하나라도 객체가 없으면 어떤 문서도 파싱하지 않고 RUNNING 그대로 반환
      * 처리 설정 hash가 다르면 DB에 쓰기 전에 ProcessingConfigMismatchException
      */
     public BuildResult ingest(BuildRequest request) {
@@ -153,18 +154,17 @@ public class PackBuildFacade {
             return result(state);
         }
 
-        Map<String, SourceDocument> includes = new HashMap<>();
+        Map<String, SourceDocument> inputs = new HashMap<>();
 
         if (!state
                 .pending()
                 .isEmpty()) {
-            for (SourceEntry include : request
-                    .includes()) {
+            for (SourceEntry input : parseInputs(request)) {
                 SourceRead read = buildService
                         .readSource(
                                 state
                                         .build(),
-                                include
+                                input
                         );
 
                 if (read
@@ -176,13 +176,13 @@ public class PackBuildFacade {
                         .outcome() == SourceReadOutcome.HASH_MISMATCH) {
                     return fail(
                             state,
-                            include
+                            input
                     );
                 }
 
-                includes
+                inputs
                         .put(
-                                include
+                                input
                                         .canonicalUrl(),
                                 read
                                         .document()
@@ -214,7 +214,7 @@ public class PackBuildFacade {
 
             ArtifactRow artifact = artifact(
                     read,
-                    includes
+                    inputs
             );
 
             transactionExecutor
@@ -240,6 +240,31 @@ public class PackBuildFacade {
                                 .buildId()));
 
         return result(state);
+    }
+
+    // 파싱 전에 모두 읽어 두는 입력, include 전부와 AsciiDoc으로 변환하는 원본 전부
+    private List<SourceEntry> parseInputs(BuildRequest request) {
+
+        List<SourceEntry> inputs = new ArrayList<>(request
+                .includes());
+
+        for (SourceEntry source : request
+                .sources()) {
+            if (documentParseService
+                    .convertsAsciidoc(
+                            request
+                                    .project(),
+                            source
+                                    .documentType(),
+                            source
+                                    .finalUrl()
+                    )) {
+                inputs
+                        .add(source);
+            }
+        }
+
+        return inputs;
     }
 
     // 봉인된 Build의 Pack 채택 또는 작성, 게시, 업로드, SUCCEEDED 기록, 정리
@@ -325,7 +350,7 @@ public class PackBuildFacade {
     // 원본 하나의 PARSE와 CHUNK 산출물, 보류면 보류 행, CPU 작업이라 트랜잭션 밖
     private ArtifactRow artifact(
             SourceRead read,
-            Map<String, SourceDocument> includes
+            Map<String, SourceDocument> inputs
     ) {
 
         try {
@@ -333,7 +358,7 @@ public class PackBuildFacade {
                     .parse(
                             read
                                     .document(),
-                            includes
+                            inputs
                     );
             PackDocument packDocument = chunkService
                     .chunk(structured);

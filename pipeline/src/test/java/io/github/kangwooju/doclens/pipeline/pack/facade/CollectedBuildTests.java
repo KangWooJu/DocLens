@@ -155,7 +155,7 @@ class CollectedBuildTests {
     }
 
     @Test
-    @DisplayName("합성 git blob readyRun은 예시를 include로 읽어 AsciiDoc 두 쪽 Build SUCCEEDED, Pack에 인용과 include 기록")
+    @DisplayName("합성 git blob readyRun은 예시를 include로 읽어 AsciiDoc 두 쪽 Build SUCCEEDED, Pack에 인용과 include, xref 제목 준 쪽 기록")
     void buildsCollectedGitRun() throws Exception {
 
         List<BuildResult> results = facade
@@ -214,6 +214,18 @@ class CollectedBuildTests {
                             .query(connection -> texts(
                                     connection,
                                     "SELECT url || ' ' || coalesce(json_array_length(source_map_json, '$.includes'), 0) FROM documents ORDER BY url"
+                            ))
+            );
+            assertEquals(
+                    List
+                            .of(
+                                    ParseFixtures.RAW_ROOT + ParseFixtures.PAGES + "nested/deep.adoc " + ParseFixtures.RAW_ROOT + ParseFixtures.PAGES + "sample.adoc",
+                                    ParseFixtures.RAW_ROOT + ParseFixtures.PAGES + "sample.adoc -"
+                            ),
+                    reader
+                            .query(connection -> texts(
+                                    connection,
+                                    "SELECT url || ' ' || coalesce(json_extract(source_map_json, '$.titleSources[0].url'), '-') FROM documents ORDER BY url"
                             ))
             );
             assertEquals(
