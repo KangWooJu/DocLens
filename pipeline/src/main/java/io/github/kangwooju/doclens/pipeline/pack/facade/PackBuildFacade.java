@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Component;
 
 import io.github.kangwooju.doclens.core.pack.dto.PackDocument;
@@ -25,6 +26,7 @@ import io.github.kangwooju.doclens.pipeline.pack.dto.ProcessingConfig;
 import io.github.kangwooju.doclens.pipeline.pack.dto.SourceEntry;
 import io.github.kangwooju.doclens.pipeline.pack.dto.SourceRead;
 import io.github.kangwooju.doclens.pipeline.pack.exception.BuildNotExportableException;
+import io.github.kangwooju.doclens.pipeline.pack.exception.PublicationConflictException;
 import io.github.kangwooju.doclens.pipeline.pack.service.BuildService;
 import io.github.kangwooju.doclens.pipeline.pack.service.PackExportService;
 import io.github.kangwooju.doclens.pipeline.pack.service.ProcessingConfigService;
@@ -52,16 +54,35 @@ public class PackBuildFacade {
     private final TransactionExecutor transactionExecutor;
     private final CollectedRunService collectedRunService;
 
-    /** ingest 뒤 봉인됐거나 이미 성공한 Build면 export까지, 같은 요청 재전송은 재개 */
+    /** ingest 뒤 봉인됐거나 이미 성공한 Build면 export까지, 같은 요청 재전송은 재개, 발행 번호는 확인 없이 다음 번호 */
     public BuildResult build(BuildRequest request) {
+
+        return build(
+                request,
+                null
+        );
+    }
+
+    /**
+     * ingest 뒤 봉인됐거나 이미 성공한 Build면 export까지, 같은 요청 재전송은 재개
+     * SUCCEEDED 기록은 Pack의 현재 최대 발행 번호(없으면 0)가 expected일 때만, 다르면 Build를 SEALED로 두고 PublicationConflictException
+     * expected가 null이면 확인 없이 다음 번호, 이미 성공한 Build는 다시 확인하지 않음
+     */
+    public BuildResult build(
+            BuildRequest request,
+            Long expected
+    ) {
 
         BuildResult ingested = ingest(request);
 
         if (ingested
                 .status() == BuildStatus.SEALED || ingested
                         .status() == BuildStatus.SUCCEEDED) {
-            return export(ingested
-                    .buildId());
+            return export(
+                    ingested
+                            .buildId(),
+                    expected
+            );
         }
 
         return ingested;
@@ -93,6 +114,18 @@ public class PackBuildFacade {
      */
     public BuildResult export(UUID buildId) {
 
+        return export(
+                buildId,
+                null
+        );
+    }
+
+    // 봉인된 Build의 Export, SUCCEEDED 기록은 expected 발행 번호 확인 뒤
+    private BuildResult export(
+            UUID buildId,
+            Long expected
+    ) {
+
         ExportTarget target = transactionExecutor
                 .write(() -> buildService
                         .exportTarget(buildId));
@@ -119,7 +152,10 @@ public class PackBuildFacade {
                 return result(buildId);
             }
             case SEALED -> {
-                return exportSealed(target);
+                return exportSealed(
+                        target,
+                        expected
+                );
             }
         }
 
@@ -268,7 +304,10 @@ public class PackBuildFacade {
     }
 
     // 봉인된 Build의 Pack 채택 또는 작성, 게시, 업로드, SUCCEEDED 기록, 정리
-    private BuildResult exportSealed(ExportTarget target) {
+    private BuildResult exportSealed(
+            ExportTarget target,
+            Long expected
+    ) {
 
         BuildRow build = target
                 .build();
@@ -296,25 +335,27 @@ public class PackBuildFacade {
         packExportService
                 .upload(pack);
 
-        transactionExecutor
-                .write(() -> {
-                    buildService
-                            .markSucceeded(
-                                    build
-                                            .buildId(),
-                                    pack,
-                                    target
-                                            .chunkReceipt()
-                                            .itemCount()
-                            );
-
-                    return null;
-                });
-
+        boolean marked = markSucceeded(
+                target,
+                pack,
+                expected
+        );
         ExportTarget succeeded = transactionExecutor
                 .write(() -> buildService
                         .exportTarget(build
                                 .buildId()));
+
+        // 바뀌지 않았는데 SUCCEEDED면 같은 Build를 먼저 끝낸 다른 요청의 재생, SEALED면 발행 번호 불일치
+        if (!marked && succeeded
+                .build()
+                .status() != BuildStatus.SUCCEEDED) {
+            throw new PublicationConflictException(
+                    build
+                            .buildId()
+                            .toString(),
+                    expected
+            );
+        }
 
         packExportService
                 .prune(succeeded
@@ -322,6 +363,59 @@ public class PackBuildFacade {
 
         return result(build
                 .buildId());
+    }
+
+    // SUCCEEDED 기록, expected가 null이면 같은 번호를 먼저 받은 다른 Build와의 경합으로 보고 한 번 다시
+    private boolean markSucceeded(
+            ExportTarget target,
+            PackRecord pack,
+            Long expected
+    ) {
+
+        try {
+            return markSucceededOnce(
+                    target,
+                    pack,
+                    expected
+            );
+        } catch (DuplicateKeyException exception) {
+            if (expected != null) {
+                throw new PublicationConflictException(
+                        target
+                                .build()
+                                .buildId()
+                                .toString(),
+                        expected
+                );
+            }
+
+            return markSucceededOnce(
+                    target,
+                    pack,
+                    null
+            );
+        }
+    }
+
+    // SUCCEEDED 기록 트랜잭션 하나, 바뀌었으면 true
+    private boolean markSucceededOnce(
+            ExportTarget target,
+            PackRecord pack,
+            Long expected
+    ) {
+
+        return transactionExecutor
+                .write(() -> buildService
+                        .markSucceeded(
+                                target
+                                        .build()
+                                        .buildId(),
+                                pack,
+                                target
+                                        .chunkReceipt()
+                                        .itemCount(),
+                                expected
+                        ));
     }
 
     // 원본 bytes가 rawSha256과 달라 Build 실패 기록 뒤 현재 상태

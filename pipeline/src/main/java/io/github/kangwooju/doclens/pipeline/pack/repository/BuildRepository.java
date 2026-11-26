@@ -2,6 +2,7 @@ package io.github.kangwooju.doclens.pipeline.pack.repository;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -35,7 +36,8 @@ public class BuildRepository {
             build_id, job_key, pack_id, source_attribution, created_by, project, exact_version,
             input_snapshot_hash, processing_config_hash, parser_policy_version, chunker_policy_version,
             source_digest, document_count, status, failure_reason,
-            pack_object_key, pack_checksum, pack_size_bytes, pack_logical_sha256
+            pack_object_key, pack_checksum, pack_size_bytes, pack_logical_sha256,
+            publication_sequence, published_at
             """;
 
     // Export cursor가 한 번에 가져오는 문서 수
@@ -464,24 +466,64 @@ public class BuildRepository {
                 });
     }
 
-    /** SEALED Build를 Pack 기록과 함께 SUCCEEDED로, 바뀌었으면 true */
+    /**
+     * SEALED Build를 Pack 기록, 다음 발행 번호와 함께 SUCCEEDED로, 바뀌었으면 true
+     * expected가 있으면 Pack의 현재 최대 발행 번호(없으면 0)가 같을 때만, null이면 확인 없이 다음 번호
+     * 다른 Build가 같은 번호를 먼저 받으면 unique 제약 위반(DuplicateKeyException)
+     */
     public boolean markSucceeded(
             UUID buildId,
-            PackRecord pack
+            PackRecord pack,
+            Long expected
     ) {
 
         return jdbcClient
-                .sql("UPDATE pipeline.builds SET status = 'SUCCEEDED', pack_object_key = ?, pack_checksum = ?, pack_size_bytes = ?, pack_logical_sha256 = ? WHERE build_id = ? AND status = 'SEALED'")
-                .params(
+                .sql("""
+                        UPDATE pipeline.builds b
+                        SET status = 'SUCCEEDED',
+                            pack_object_key = :objectKey,
+                            pack_checksum = :checksum,
+                            pack_size_bytes = :sizeBytes,
+                            pack_logical_sha256 = :logicalSha256,
+                            publication_sequence = (
+                                SELECT coalesce(max(x.publication_sequence), 0) + 1
+                                FROM pipeline.builds x
+                                WHERE x.pack_id = b.pack_id),
+                            published_at = clock_timestamp()
+                        WHERE b.build_id = :buildId
+                            AND b.status = 'SEALED'
+                            AND (CAST(:expected AS bigint) IS NULL OR (
+                                SELECT coalesce(max(x.publication_sequence), 0)
+                                FROM pipeline.builds x
+                                WHERE x.pack_id = b.pack_id) = CAST(:expected AS bigint))
+                        """)
+                .param(
+                        "objectKey",
                         pack
-                                .objectKey(),
+                                .objectKey()
+                )
+                .param(
+                        "checksum",
                         pack
-                                .checksum(),
+                                .checksum()
+                )
+                .param(
+                        "sizeBytes",
                         pack
-                                .sizeBytes(),
+                                .sizeBytes()
+                )
+                .param(
+                        "logicalSha256",
                         pack
-                                .logicalContentSha256(),
+                                .logicalContentSha256()
+                )
+                .param(
+                        "buildId",
                         buildId
+                )
+                .param(
+                        "expected",
+                        expected
                 )
                 .update() == 1;
     }
@@ -506,6 +548,11 @@ public class BuildRepository {
 
         String objectKey = rs
                 .getString("pack_object_key");
+        OffsetDateTime publishedAt = rs
+                .getObject(
+                        "published_at",
+                        OffsetDateTime.class
+                );
 
         return new BuildRow(
                 rs
@@ -550,7 +597,14 @@ public class BuildRepository {
                                 .getLong("pack_size_bytes"),
                         rs
                                 .getString("pack_logical_sha256")
-                )
+                ),
+                rs
+                        .getObject(
+                                "publication_sequence",
+                                Long.class
+                        ),
+                publishedAt == null ? null : publishedAt
+                        .toInstant()
         );
     }
 }
