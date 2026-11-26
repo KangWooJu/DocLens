@@ -378,31 +378,40 @@ public class BuildService {
         );
     }
 
-    /** SEALED Build를 게시한 Pack과 함께 SUCCEEDED로, 바뀌면 같은 범위에서 EXPORT 영수증 */
-    public void markSucceeded(
+    /**
+     * SEALED Build를 게시한 Pack, 다음 발행 번호와 함께 SUCCEEDED로, 바뀌면 같은 범위에서 EXPORT 영수증
+     * expected가 null이 아니면 Pack의 현재 최대 발행 번호와 같을 때만 바꿈, 바뀌었으면 true
+     */
+    public boolean markSucceeded(
             UUID buildId,
             PackRecord pack,
-            int documentCount
+            int documentCount,
+            Long expected
     ) {
 
-        if (buildRepository
+        if (!buildRepository
                 .markSucceeded(
                         buildId,
-                        pack
+                        pack,
+                        expected
                 )) {
-            buildRepository
-                    .insertReceipt(
-                            buildId,
-                            "EXPORT",
-                            new StageDigest(
-                                    pack
-                                            .logicalContentSha256(),
-                                    documentCount,
-                                    pack
-                                            .sizeBytes()
-                            )
-                    );
+            return false;
         }
+
+        buildRepository
+                .insertReceipt(
+                        buildId,
+                        "EXPORT",
+                        new StageDigest(
+                                pack
+                                        .logicalContentSha256(),
+                                documentCount,
+                                pack
+                                        .sizeBytes()
+                        )
+                );
+
+        return true;
     }
 
     /** 호출자에게 돌려줄 현재 Build 상태 */

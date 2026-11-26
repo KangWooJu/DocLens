@@ -2,11 +2,15 @@ package io.github.kangwooju.doclens.pipeline;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.List;
 import java.util.UUID;
 
+import javax.sql.DataSource;
+
+import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -15,6 +19,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import io.github.kangwooju.doclens.testsupport.PostgresTestConfiguration;
 
@@ -33,6 +39,9 @@ class MigrationTests {
 
     @Autowired
     private JdbcClient jdbcClient;
+
+    @Autowired
+    private PostgreSQLContainer postgres;
 
     // 시험마다 pipeline 표 비우기
     @BeforeEach
@@ -394,6 +403,109 @@ class MigrationTests {
         ));
     }
 
+    @Test
+    @DisplayName("V003은 별도 database에서 기존 SUCCEEDED를 만든 순서대로 1, 2로 백필, SEALED는 번호 없음, 이후 번호 변경 거부")
+    void backfillsPublicationSequence() {
+
+        jdbcClient
+                .sql("CREATE DATABASE v003_backfill")
+                .update();
+
+        DataSource dataSource = new DriverManagerDataSource(
+                "jdbc:postgresql://" + postgres
+                        .getHost() + ":" + postgres
+                                .getMappedPort(PostgreSQLContainer.POSTGRESQL_PORT) + "/v003_backfill",
+                postgres
+                        .getUsername(),
+                postgres
+                        .getPassword()
+        );
+        JdbcClient backfill = JdbcClient
+                .create(dataSource);
+
+        migrate(
+                dataSource,
+                "2"
+        );
+
+        UUID first = insertBuild(
+                backfill,
+                UUID.randomUUID(),
+                "RUNNING"
+        );
+        UUID sealed = insertBuild(
+                backfill,
+                UUID.randomUUID(),
+                "RUNNING"
+        );
+        UUID second = insertBuild(
+                backfill,
+                UUID.randomUUID(),
+                "RUNNING"
+        );
+
+        for (UUID buildId : List
+                .of(
+                        first,
+                        sealed,
+                        second
+                )) {
+            setStatus(
+                    backfill,
+                    buildId,
+                    "SEALED"
+            );
+        }
+
+        succeed(
+                backfill,
+                first,
+                HASH
+        );
+        succeed(
+                backfill,
+                second,
+                HASH
+        );
+        migrate(
+                dataSource,
+                "3"
+        );
+
+        assertEquals(
+                1L,
+                sequence(
+                        backfill,
+                        first
+                )
+        );
+        assertEquals(
+                2L,
+                sequence(
+                        backfill,
+                        second
+                )
+        );
+        assertNull(sequence(
+                backfill,
+                sealed
+        ));
+        assertEquals(
+                "O",
+                backfill
+                        .sql("SELECT tgenabled FROM pg_trigger WHERE tgname = 'builds_guard'")
+                        .query(String.class)
+                        .single()
+        );
+        assertThrows(
+                DataAccessException.class,
+                () -> backfill
+                        .sql("UPDATE pipeline.builds SET publication_sequence = 5 WHERE build_id = ?")
+                        .param(first)
+                        .update()
+        );
+    }
+
     // 상태와 pack key만 바꿔 쓰는 Build INSERT 문
     private static String buildInsert() {
 
@@ -424,7 +536,21 @@ class MigrationTests {
             String status
     ) {
 
-        jdbcClient
+        return insertBuild(
+                jdbcClient,
+                buildId,
+                status
+        );
+    }
+
+    // 주어진 database에 지정 상태의 Build 한 행
+    private static UUID insertBuild(
+            JdbcClient client,
+            UUID buildId,
+            String status
+    ) {
+
+        client
                 .sql(buildInsert())
                 .param(
                         "buildId",
@@ -502,7 +628,21 @@ class MigrationTests {
             String status
     ) {
 
-        jdbcClient
+        setStatus(
+                jdbcClient,
+                buildId,
+                status
+        );
+    }
+
+    // 주어진 database에서 상태만 바꾸는 UPDATE
+    private static void setStatus(
+            JdbcClient client,
+            UUID buildId,
+            String status
+    ) {
+
+        client
                 .sql("UPDATE pipeline.builds SET status = ? WHERE build_id = ?")
                 .params(
                         status,
@@ -517,7 +657,21 @@ class MigrationTests {
             String checksum
     ) {
 
-        jdbcClient
+        succeed(
+                jdbcClient,
+                buildId,
+                checksum
+        );
+    }
+
+    // 주어진 database에서 pack 열 4개를 채우는 SUCCEEDED 전이
+    private static void succeed(
+            JdbcClient client,
+            UUID buildId,
+            String checksum
+    ) {
+
+        client
                 .sql("UPDATE pipeline.builds SET status = 'SUCCEEDED', pack_object_key = 'packs/spring-boot-4.1.2/b/a.pack', pack_checksum = ?, pack_size_bytes = 10, pack_logical_sha256 = ? WHERE build_id = ?")
                 .params(
                         checksum,
@@ -525,5 +679,39 @@ class MigrationTests {
                         buildId
                 )
                 .update();
+    }
+
+    // 주어진 database의 Build 발행 번호, 없으면 null
+    private static Long sequence(
+            JdbcClient client,
+            UUID buildId
+    ) {
+
+        return client
+                .sql("SELECT publication_sequence FROM pipeline.builds WHERE build_id = ?")
+                .param(buildId)
+                .query((rs, row) -> rs
+                        .getObject(
+                                "publication_sequence",
+                                Long.class
+                        ))
+                .list()
+                .getFirst();
+    }
+
+    // 앱과 같은 schema 설정으로 target 판까지 Flyway migration
+    private static void migrate(
+            DataSource dataSource,
+            String target
+    ) {
+
+        Flyway
+                .configure()
+                .dataSource(dataSource)
+                .schemas("pipeline")
+                .defaultSchema("pipeline")
+                .target(target)
+                .load()
+                .migrate();
     }
 }

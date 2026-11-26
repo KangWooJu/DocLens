@@ -23,14 +23,17 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
+import io.github.kangwooju.doclens.pipeline.collected.dto.ObjectRef;
 import io.github.kangwooju.doclens.pipeline.global.transaction.TransactionExecutor;
 import io.github.kangwooju.doclens.pipeline.pack.dto.BuildResult;
+import io.github.kangwooju.doclens.pipeline.pack.dto.BuildRow;
 import io.github.kangwooju.doclens.pipeline.pack.dto.ExportTarget;
 import io.github.kangwooju.doclens.pipeline.pack.dto.PackRecord;
 import io.github.kangwooju.doclens.pipeline.pack.dto.SourceEntry;
 import io.github.kangwooju.doclens.pipeline.pack.exception.BuildArtifactMissingException;
 import io.github.kangwooju.doclens.pipeline.pack.service.BuildService;
 import io.github.kangwooju.doclens.pipeline.pack.service.PackExportService;
+import io.github.kangwooju.doclens.pipeline.pack.service.PublicationService;
 import io.github.kangwooju.doclens.pipeline.pack.type.BuildStatus;
 import io.github.kangwooju.doclens.testsupport.PackRequestFixtures;
 import io.github.kangwooju.doclens.testsupport.PostgresTestConfiguration;
@@ -67,6 +70,9 @@ class ExportS3Tests {
 
     @Autowired
     private JdbcClient jdbcClient;
+
+    @Autowired
+    private PublicationService publicationService;
 
     @Autowired
     private S3Client s3Client;
@@ -248,6 +254,53 @@ class ExportS3Tests {
                                 .builder()
                                 .bucket(S3MockTestConfiguration.BUCKET)
                                 .prefix("packs/spring-boot-4.1.2/" + buildId + "/")
+                                .build())
+                        .keyCount()
+        );
+    }
+
+    @Test
+    @DisplayName("발행한 Build의 manifest는 packs 접두 검사를 통과해 S3에 한 번만 게시, 다시 불러도 같은 객체")
+    void publishesManifestToS3() {
+
+        BuildResult result = facade
+                .build(
+                        PackRequestFixtures
+                                .request(PackRequestFixtures
+                                        .sources()),
+                        null
+                );
+        BuildRow published = transactionExecutor
+                .write(() -> buildService
+                        .exportTarget(result
+                                .buildId())
+                        .build());
+        ObjectRef first = publicationService
+                .ensureManifest(published);
+
+        assertEquals(
+                "packs/spring-boot-4.1.2/publications/1.json",
+                first
+                        .objectKey()
+        );
+        assertEquals(
+                first
+                        .contentHash(),
+                s3Checksum(first
+                        .objectKey())
+        );
+        assertEquals(
+                first,
+                publicationService
+                        .ensureManifest(published)
+        );
+        assertEquals(
+                1,
+                s3Client
+                        .listObjectsV2(ListObjectsV2Request
+                                .builder()
+                                .bucket(S3MockTestConfiguration.BUCKET)
+                                .prefix("packs/spring-boot-4.1.2/publications/")
                                 .build())
                         .keyCount()
         );
