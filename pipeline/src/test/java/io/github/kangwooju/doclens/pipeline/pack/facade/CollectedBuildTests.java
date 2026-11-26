@@ -20,10 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -35,8 +32,6 @@ import io.github.kangwooju.doclens.pipeline.pack.dto.BuildResult;
 import io.github.kangwooju.doclens.pipeline.pack.policy.ProcessingConfigPolicy;
 import io.github.kangwooju.doclens.pipeline.pack.type.BuildStatus;
 import io.github.kangwooju.doclens.pipeline.parse.ParseFixtures;
-import io.github.kangwooju.doclens.pipeline.parse.store.ParserProfileStore;
-import io.github.kangwooju.doclens.pipeline.parse.type.ApprovalState;
 import io.github.kangwooju.doclens.testsupport.CollectedRunFixtures;
 import io.github.kangwooju.doclens.testsupport.CollectedRunFixtures.Bundle;
 import io.github.kangwooju.doclens.testsupport.CollectedRunFixtures.Document;
@@ -50,32 +45,10 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 @SpringBootTest(properties = "doclens.pipeline.object-store=s3")
 @Import({
         PostgresTestConfiguration.class,
-        S3MockTestConfiguration.class,
-        CollectedBuildTests.EnabledAsciidocProfile.class
+        S3MockTestConfiguration.class
 })
 @DisplayName("S3에 올린 collector readyRun 묶음으로 Build와 Pack 업로드")
 class CollectedBuildTests {
-
-    /** AsciiDoc 프로필만 ENABLED로 바꾼 등록 프로필, 실제 표본 대조와 승인 전 시험용 */
-    @TestConfiguration(proxyBeanMethods = false)
-    static class EnabledAsciidocProfile {
-
-        // 기본 등록 순서 그대로 AsciiDoc 프로필 승인 상태만 바꾼 프로필 목록
-        @Bean
-        @Primary
-        ParserProfileStore enabledAsciidocProfileStore() {
-
-            return new ParserProfileStore(List
-                    .of(
-                            ParserProfileStore.SPRING_BOOT_REFERENCE,
-                            ParseFixtures
-                                    .withApproval(
-                                            ParserProfileStore.SPRING_BOOT_ASCIIDOC_REFERENCE,
-                                            ApprovalState.ENABLED
-                                    )
-                    ));
-        }
-    }
 
     @TempDir
     static Path objectRoot;
