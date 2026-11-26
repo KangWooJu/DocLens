@@ -5,8 +5,11 @@ import json
 import sys
 from collections.abc import Sequence
 from pathlib import Path
-from uuid import UUID, uuid4
+from uuid import UUID
 
+import uvicorn
+
+from collector.api import CallerTokens, create_api
 from collector.app import App, build_app
 from collector.config import Settings
 from collector.contract import schema
@@ -27,6 +30,7 @@ EXIT_CODES: dict[str, tuple[dict[str, int], int]] = {
     "cancel": ({"NOT_FOUND": 4}, 3),
     "resume": ({"NOT_FOUND": 4}, 3),
     "work": ({}, 2),
+    "api": ({}, 2),
 }
 
 
@@ -63,6 +67,16 @@ def parser() -> argparse.ArgumentParser:
         type=float,
         metavar="SECONDS",
     )
+    # 대기 job이 없어도 끝내지 않고 종료 신호까지 상주
+    work.add_argument("--serve", action="store_true")
+
+    api = commands.add_parser("api")
+    api.add_argument("--host", default="127.0.0.1")
+    api.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+    )
 
     return root
 
@@ -73,12 +87,32 @@ def main(
 ) -> int:
     args = parser().parse_args(argv)
     command = args.command if args.command != "registry" else f"registry {args.registry_command}"
+    callers = None
+
+    if command == "api":
+        try:
+            callers = CallerTokens.parse(Settings.from_env().caller_tokens)
+        except ValueError as error:
+            print(error, file=sys.stderr)
+            return 2
+
     owned = app is None
     app = app or build_app(Settings.from_env(), PinnedHttpsConnector())
 
     try:
         if command == "work":
-            return work(app, args.max_wait)
+            return work(
+                app,
+                args.max_wait,
+                args.serve,
+            )
+
+        if callers is not None:
+            return serve_api(
+                app,
+                callers,
+                args,
+            )
 
         outputs = run(app, args)
 
@@ -91,14 +125,7 @@ def main(
     except RequestRejected as rejected:
         emit(
             "error",
-            {
-                "schemaVersion": 1,
-                "code": rejected.code,
-                "message": rejected.message[:500] or rejected.code,
-                "requestId": None if rejected.request_id is None else str(rejected.request_id),
-                "retryable": False,
-                "traceId": str(rejected.trace_id or uuid4()),
-            },
+            rejected.to_json(),
             sys.stderr,
         )
         codes, default = EXIT_CODES[command]
@@ -162,6 +189,7 @@ def run(
 def work(
     app: App,
     max_wait: float | None,
+    serve: bool,
 ) -> int:
     """연락처가 없으면 시작 거부, 처리한 job마다 status 한 줄"""
 
@@ -173,7 +201,26 @@ def work(
             status.to_json(),
             sys.stdout,
         ),
+        serve,
     )
+
+
+def serve_api(
+    app: App,
+    callers: CallerTokens,
+    args: argparse.Namespace,
+) -> int:
+    """worker 프로세스 1개, 종료 신호에 진행 중 요청을 20초까지 기다림"""
+
+    uvicorn.run(
+        create_api(app, callers),
+        host=args.host,
+        port=args.port,
+        workers=1,
+        timeout_graceful_shutdown=20,
+        server_header=False,
+    )
+    return 0
 
 
 def read_request(path: Path) -> CollectionRequest:

@@ -66,6 +66,7 @@ def build_app(
             registry_repository,
             policy,
         ),
+        store,
     )
     crawl = CrawlFacade(
         pool,

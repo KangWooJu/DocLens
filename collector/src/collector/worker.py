@@ -9,22 +9,14 @@ from contextlib import AbstractContextManager
 from types import FrameType
 from uuid import UUID, uuid4
 
-import psycopg
-from psycopg import errors
-
 from collector.config import CrawlPolicy
 from collector.crawl.crawl_facade import CrawlFacade
+from collector.db import DB_ERRORS
 from collector.job.job_facade import JobFacade
 from collector.job.job_model import ClaimedJob, Failed, JobOutcome, Succeeded, Waiting
 from collector.job.job_repository import Lease
 from collector.job.job_service import JobStatus
 
-# DB 연결 끊김, PG 재시작, 서버 측 TX 시간 초과
-DB_ERRORS = (
-    psycopg.OperationalError,
-    errors.IdleInTransactionSessionTimeout,
-    errors.TransactionTimeout,
-)
 HEARTBEAT_THREAD = "collector-heartbeat"
 
 type WorkerLock = Callable[[], AbstractContextManager[Callable[[], bool] | None]]
@@ -96,8 +88,9 @@ class Worker:
         self,
         max_wait: float | None,
         report: Callable[[JobStatus], None] = lambda status: None,
+        serve: bool = False,
     ) -> int:
-        """0 대기 job 없음, 6 max_wait 도달, 1 내부 오류, 5 다른 worker 실행 중"""
+        """0 대기 job 없음(serve면 종료 신호), 6 max_wait 도달, 1 내부 오류, 5 다른 worker 실행 중"""
 
         started = time.monotonic()
         self._shutdown.clear()
@@ -108,6 +101,7 @@ class Worker:
                 started,
                 max_wait,
                 report,
+                serve,
             )
         finally:
             restore()
@@ -117,6 +111,7 @@ class Worker:
         started: float,
         max_wait: float | None,
         report: Callable[[JobStatus], None],
+        serve: bool,
     ) -> int:
         with self._lock() as alive:
             if alive is None:
@@ -146,7 +141,12 @@ class Worker:
                     continue
 
                 if pending == 0:
-                    return 0
+                    if not serve:
+                        return 0
+
+                    # 상주 worker는 새 접수를 기다림
+                    self._shutdown.wait(self._policy.idle_poll)
+                    continue
 
                 due = max(due or 0.0, self._policy.in_flight_poll)
 
