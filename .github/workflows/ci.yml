@@ -77,7 +77,7 @@ jobs:
   e2e:
     name: Collected build end to end
     runs-on: ubuntu-latest
-    # Python crawl of the loopback fixture site, then the pipeline build from its readyRun; no external host
+    # Python crawl of a synthetic git tree on the loopback fixture server with the committed registry's git definitions, then the packed pipeline jar builds from its readyRun; no external host
     needs: [java, collector, contracts]
     timeout-minutes: 30
     env:
@@ -106,7 +106,7 @@ jobs:
 
       - run: docker compose run --rm collector-migrate
 
-      - name: Offline crawl against the loopback fixture site
+      - name: Offline crawl of the synthetic git tree
         working-directory: collector
         shell: bash
         run: |
@@ -123,6 +123,8 @@ jobs:
           key=$(jq -r .objectKey "$RUNNER_TEMP/ready-run.json")
           hash=$(jq -r .contentHash "$RUNNER_TEMP/ready-run.json")
           size=$(jq -r .sizeBytes "$RUNNER_TEMP/ready-run.json")
-          ./gradlew :pipeline:bootRun --console=plain --args="--spring.main.web-application-type=none --doclens.pipeline.object-store=s3 --doclens.pipeline.ready-run.key=$key --doclens.pipeline.ready-run.hash=$hash --doclens.pipeline.ready-run.size=$size" | tee "$RUNNER_TEMP/build.log"
+          # The packed jar, so JRuby and AsciidoctorJ load from the nested jars as in a real run
+          ./gradlew :pipeline:bootJar --console=plain
+          java -jar pipeline/build/libs/pipeline.jar --spring.main.web-application-type=none --doclens.pipeline.object-store=s3 --doclens.pipeline.ready-run.key=$key --doclens.pipeline.ready-run.hash=$hash --doclens.pipeline.ready-run.size=$size | tee "$RUNNER_TEMP/build.log"
           pack=$(grep -o 'packs/[^,]*\.pack' "$RUNNER_TEMP/build.log")
           curl -sf -o /dev/null -I "$DOCLENS_S3_ENDPOINT/$DOCLENS_S3_BUCKET/$pack"

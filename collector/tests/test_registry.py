@@ -237,22 +237,6 @@ def probe(
     )
 
 
-def test_committed_registry_file_imports_blocked(
-    app: App,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    code, out, _ = cli(
-        app,
-        capsys,
-        "registry",
-        "import",
-        ROOT / "registry" / "spring-boot-4.1.json",
-    )
-
-    assert code == 0
-    assert [(row["sourceId"], row["approvalState"]) for row in out] == [(SOURCE_ID, "BLOCKED")]
-
-
 def test_committed_git_registry_file_imports_two_blocked_path_lists(
     app: App,
     capsys: pytest.CaptureFixture[str],
