@@ -121,6 +121,37 @@ cd collector && uv sync && uv run pytest
 uv run --no-project --python 3.13 --with jsonschema==4.26.0 python tools/check_contracts.py
 ```
 
+## 로컬 스택 실행
+
+Docker와 Compose가 필요합니다. `.env.example`을 `.env`로 복사해 collector와 S3 값을 채우고, 아래 명령은 모두 저장소 루트에서 실행합니다.
+
+1. 토큰: `scheduler`와 `operator`마다 한 번씩 실행합니다. scheduler 실행의 첫 줄은 `.env`의 `DOCLENS_SCHEDULER_TOKEN`에, operator 첫 줄은 셸의 `DOCLENS_OPERATOR_TOKEN`에 두고, 둘째 줄로 `DOCLENS_CALLER_TOKENS=scheduler:<hash>,operator:<hash>`를 채웁니다.
+
+   ```bash
+   python3 -c "import secrets,hashlib;t=secrets.token_urlsafe(32);print(t);print(hashlib.sha256(t.encode()).hexdigest())"
+   ```
+
+2. 요청 틀: `registry import`, `probe`, `approve`로 원본을 승인한 뒤 만듭니다.
+
+   ```bash
+   mkdir -p .local && (cd collector && uv run python -m collector request <sourceId>...) > .local/collection-request.json
+   ```
+
+3. 띄운 뒤 `docker compose logs pipeline | grep 'processing config'`의 `sha256:…`를 `.env`의 `DOCLENS_SCHEDULER_PROCESSING_CONFIG_HASH`에 넣고 scheduler를 다시 띄웁니다(`docker compose --profile app up -d scheduler`).
+
+   ```bash
+   ./gradlew :pipeline:bootJar :scheduler-server:bootJar
+   docker compose --profile app --profile worker up -d --wait
+   ```
+
+4. 지금 수집(출력 `{"result":"CREATED|DUPLICATE_SLOT|ACTIVE_RUN_EXISTS","runId":…}`):
+
+   ```bash
+   docker compose run --rm scheduler --spring.profiles.active=command collect-now <label>
+   ```
+
+pipeline과 scheduler 컨테이너는 `pipeline/build/libs`, `scheduler-server/build/libs`의 jar를 그대로 실행합니다. 스택이 도는 동안 jar를 다시 빌드하지 말고, 먼저 `docker compose --profile app --profile worker down`으로 내립니다.
+
 ## 라이선스
 
 [MIT](LICENSE)
