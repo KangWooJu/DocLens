@@ -174,6 +174,16 @@ public class BuildRepository {
                 .optional();
     }
 
+    /** Pack에서 발행 번호가 가장 큰 Build, 발행이 없으면 빈 값 */
+    public Optional<BuildRow> findLatestPublished(String packId) {
+
+        return jdbcClient
+                .sql("SELECT " + BUILD_COLUMNS + " FROM pipeline.builds WHERE pack_id = ? AND publication_sequence IS NOT NULL ORDER BY publication_sequence DESC LIMIT 1")
+                .param(packId)
+                .query(BuildRepository::buildRow)
+                .optional();
+    }
+
     /** 산출물이 아직 없는 원본, documentId 순 */
     public List<SourceEntry> pendingSources(UUID buildId) {
 

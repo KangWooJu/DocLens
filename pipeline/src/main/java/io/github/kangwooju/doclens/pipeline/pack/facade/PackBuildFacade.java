@@ -4,7 +4,10 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Component;
@@ -13,6 +16,8 @@ import io.github.kangwooju.doclens.core.pack.dto.PackDocument;
 import io.github.kangwooju.doclens.core.pack.writer.PackWriter;
 import io.github.kangwooju.doclens.pipeline.chunk.service.ChunkService;
 import io.github.kangwooju.doclens.pipeline.collected.dto.ObjectRef;
+import io.github.kangwooju.doclens.pipeline.collected.dto.ProcessRequest;
+import io.github.kangwooju.doclens.pipeline.collected.dto.ProcessingReceipt;
 import io.github.kangwooju.doclens.pipeline.collected.service.CollectedRunService;
 import io.github.kangwooju.doclens.pipeline.global.transaction.TransactionExecutor;
 import io.github.kangwooju.doclens.pipeline.pack.dto.ArtifactRow;
@@ -25,11 +30,15 @@ import io.github.kangwooju.doclens.pipeline.pack.dto.PackRecord;
 import io.github.kangwooju.doclens.pipeline.pack.dto.ProcessingConfig;
 import io.github.kangwooju.doclens.pipeline.pack.dto.SourceEntry;
 import io.github.kangwooju.doclens.pipeline.pack.dto.SourceRead;
+import io.github.kangwooju.doclens.pipeline.pack.exception.BuildFailedException;
+import io.github.kangwooju.doclens.pipeline.pack.exception.BuildNeedsReviewException;
 import io.github.kangwooju.doclens.pipeline.pack.exception.BuildNotExportableException;
+import io.github.kangwooju.doclens.pipeline.pack.exception.BuildPendingException;
 import io.github.kangwooju.doclens.pipeline.pack.exception.PublicationConflictException;
 import io.github.kangwooju.doclens.pipeline.pack.service.BuildService;
 import io.github.kangwooju.doclens.pipeline.pack.service.PackExportService;
 import io.github.kangwooju.doclens.pipeline.pack.service.ProcessingConfigService;
+import io.github.kangwooju.doclens.pipeline.pack.service.PublicationService;
 import io.github.kangwooju.doclens.pipeline.pack.type.BuildStatus;
 import io.github.kangwooju.doclens.pipeline.pack.type.SourceReadOutcome;
 import io.github.kangwooju.doclens.pipeline.parse.dto.SourceDocument;
@@ -53,6 +62,80 @@ public class PackBuildFacade {
     private final ChunkService chunkService;
     private final TransactionExecutor transactionExecutor;
     private final CollectedRunService collectedRunService;
+    private final PublicationService publicationService;
+
+    // readyRun마다 처리 하나, 인스턴스 하나 기준이고 항목이 readyRun마다 하나라 하루 하나씩 늘어남, 인스턴스가 둘이 되면 PostgreSQL advisory lock
+    private final ConcurrentMap<String, Object> inFlight = new ConcurrentHashMap<>();
+
+    /**
+     * contracts processRequest 하나를 요청 스레드에서 Build, Export, 발행까지 처리하고 receipt 반환
+     * 같은 readyRun 요청은 한 번에 하나, 같은 본문 재전송은 같은 Build의 receipt
+     * 결과가 RUNNING, NEEDS_REVIEW, FAILED이면 결과별 예외, 발행 번호 불일치는 PublicationConflictException
+     */
+    public ProcessingReceipt process(String processRequestJson) {
+
+        ProcessRequest processRequest = collectedRunService
+                .processRequest(processRequestJson);
+        Object lock = inFlight
+                .computeIfAbsent(
+                        processRequest
+                                .readyRunId(),
+                        readyRunId -> new Object()
+                );
+
+        synchronized (lock) {
+            BuildRequest request = collectedRunService
+                    .requests(
+                            processRequest
+                                    .body(),
+                            processRequest
+                                    .processingConfigHash()
+                    )
+                    .getFirst();
+            BuildResult result = build(
+                    request,
+                    processRequest
+                            .expectedPublicationSequence()
+            );
+
+            return receipt(
+                    request,
+                    published(result)
+            );
+        }
+    }
+
+    /** project와 정확 버전의 최신 publication manifest canonical JSON, 객체가 없으면 같은 bytes로 게시, 발행이 없으면 빈 값 */
+    public Optional<String> latestPublication(
+            String project,
+            String exactVersion
+    ) {
+
+        return transactionExecutor
+                .write(() -> publicationService
+                        .latest(
+                                project,
+                                exactVersion
+                        ))
+                .map(published -> {
+                    publicationService
+                            .ensureManifest(published);
+
+                    return publicationService
+                            .manifest(published);
+                });
+    }
+
+    /** 지금 JVM이 적용할 처리 설정 hash */
+    public String processingConfigHash() {
+
+        return processingConfigService
+                .current(
+                        DocumentParseService.PARSER_POLICY_VERSION,
+                        ChunkService.CHUNKER_POLICY_VERSION
+                )
+                .hash();
+    }
 
     /** ingest 뒤 봉인됐거나 이미 성공한 Build면 export까지, 같은 요청 재전송은 재개, 발행 번호는 확인 없이 다음 번호 */
     public BuildResult build(BuildRequest request) {
@@ -416,6 +499,73 @@ public class PackBuildFacade {
                                         .itemCount(),
                                 expected
                         ));
+    }
+
+    // SUCCEEDED Build의 행, 그 밖 상태는 결과별 예외
+    private BuildRow published(BuildResult result) {
+
+        String buildId = result
+                .buildId()
+                .toString();
+
+        switch (result
+                .status()) {
+            case SUCCEEDED -> {
+                return transactionExecutor
+                        .write(() -> buildService
+                                .exportTarget(result
+                                        .buildId()))
+                        .build();
+            }
+            case RUNNING -> throw new BuildPendingException(buildId);
+            case NEEDS_REVIEW -> throw new BuildNeedsReviewException(
+                    buildId,
+                    result
+                            .holds()
+                            .size()
+            );
+            case FAILED -> throw new BuildFailedException(
+                    buildId,
+                    result
+                            .failureReason()
+            );
+            case SEALED -> throw new IllegalStateException("build " + buildId + " is still sealed after export");
+        }
+
+        throw new IllegalStateException("unknown status " + result
+                .status());
+    }
+
+    // 발행한 Build의 manifest 게시 뒤 receipt, 활성화 작업은 아직 없어 null
+    private ProcessingReceipt receipt(
+            BuildRequest request,
+            BuildRow published
+    ) {
+
+        return new ProcessingReceipt(
+                request
+                        .runInputSnapshotHash(),
+                List
+                        .of(new ProcessingReceipt.ProjectionResult(
+                                new ProcessingReceipt.PackScope(
+                                        request
+                                                .project(),
+                                        request
+                                                .exactVersion(),
+                                        request
+                                                .applicability()
+                                ),
+                                BuildStatus.SUCCEEDED
+                                        .name(),
+                                published
+                                        .buildId(),
+                                published
+                                        .buildId(),
+                                null
+                        )),
+                publicationService
+                        .ensureManifest(published)
+        );
     }
 
     // 원본 bytes가 rawSha256과 달라 Build 실패 기록 뒤 현재 상태

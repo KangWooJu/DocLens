@@ -8,11 +8,15 @@ import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import io.github.kangwooju.doclens.core.json.CanonicalJson;
 import io.github.kangwooju.doclens.pipeline.collected.dto.ObjectRef;
 import io.github.kangwooju.doclens.pipeline.global.id.IdHash;
 import io.github.kangwooju.doclens.pipeline.parse.ParseFixtures;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 /**
  * 합성 fixture 원본으로 만든 collector readyRun 묶음, batch 하나
@@ -46,6 +50,10 @@ public final class CollectedRunFixtures {
             .repeat(64);
 
     private static final String TIMESTAMP = "2026-11-24T00:00:00Z";
+
+    private static final JsonMapper JSON = JsonMapper
+            .builder()
+            .build();
 
     // 인스턴스 생성 금지
     private CollectedRunFixtures() {
@@ -555,6 +563,72 @@ public final class CollectedRunFixtures {
                 ),
                 objects
         );
+    }
+
+    /**
+     * 묶음의 readyRun을 scheduler 변환 규칙대로 바꾼 contracts processRequest JSON
+     * createdAt을 빼고 요청 필드를 더하며 projection마다 기대 발행 번호와 승인 ID null
+     */
+    public static String processRequest(
+            Bundle bundle,
+            String processingConfigHash,
+            long expectedPublicationSequence
+    ) {
+
+        ObjectNode request = (ObjectNode) JSON
+                .readTree(bundle
+                        .objects()
+                        .get(bundle
+                                .readyRun()
+                                .objectKey()));
+        request
+                .remove("createdAt");
+        request
+                .put(
+                        "requestId",
+                        UUID
+                                .randomUUID()
+                                .toString()
+                );
+        request
+                .put(
+                        "traceId",
+                        UUID
+                                .randomUUID()
+                                .toString()
+                );
+        request
+                .put(
+                        "requestedAt",
+                        TIMESTAMP
+                );
+        request
+                .put(
+                        "processingConfigHash",
+                        processingConfigHash
+                );
+        request
+                .putNull("modelChecksum");
+        request
+                .put(
+                        "activationMode",
+                        "AUTO"
+                );
+
+        for (JsonNode projection : request
+                .get("projections")
+                .values()) {
+            ((ObjectNode) projection)
+                    .put(
+                            "expectedPublicationSequence",
+                            expectedPublicationSequence
+                    );
+            ((ObjectNode) projection)
+                    .putNull("activationApprovalId");
+        }
+
+        return JSON
+                .writeValueAsString(request);
     }
 
     /** bytes의 sha256: 접두 hex */

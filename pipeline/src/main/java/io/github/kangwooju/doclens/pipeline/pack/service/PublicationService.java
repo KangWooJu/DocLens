@@ -10,6 +10,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 
@@ -35,6 +36,16 @@ public class PublicationService {
 
     private final BuildRepository buildRepository;
     private final ObjectStore objectStore;
+
+    /** project와 정확 버전 Pack의 최신 발행 Build, 발행이 없으면 빈 값 */
+    public Optional<BuildRow> latest(
+            String project,
+            String exactVersion
+    ) {
+
+        return buildRepository
+                .findLatestPublished(project + "-" + exactVersion);
+    }
 
     /** 발행한 Build의 manifest를 Pack 디렉터리 아래 publications/발행 번호.json에 게시, 이미 같은 bytes가 있으면 채택 */
     public ObjectRef ensureManifest(BuildRow published) {
