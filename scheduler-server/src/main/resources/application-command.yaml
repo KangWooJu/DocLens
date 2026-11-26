@@ -1,0 +1,4 @@
+# One-shot operator commands: no web server, no schedules
+spring:
+  main:
+    web-application-type: none
