@@ -55,6 +55,12 @@ Language-neutral contracts shared by the Python collector and the Java modules. 
 
 Enums are written by name, sets as code-point-sorted arrays. Paths, timestamps and the hash itself are excluded. Behaviour coded in Java (selectors, renderers, ID formulas) is identified by the policy versions: `pipeline/src/test/resources/golden/processing-outputs.jsonl` pins the fixture outputs per hash, and CI rejects a pull request that changes or removes a line. A request whose hash differs from the applied configuration is rejected before any Build row is written.
 
+## Processing request
+
+- `POST /internal/v1/processing-jobs` is synchronous: a 200 `processingRunResultReceipt` means the Build, the Pack upload and the publication are done, and `resultObjectRef` is the publication manifest `packs/<packId>/publications/<publicationSequence>.json`. A Build held for review answers 422 error `NEEDS_REVIEW`, since a receipt needs a result object.
+- In Phase 1 `buildJobId` is the same value as `buildId`.
+- With `AUTO`, `expectedPublicationSequence` (0 before the first publication) is compared with the Pack's latest sequence in the same update that records the Build as succeeded. A mismatch answers 409 `STALE_OWNER`, and the Build stays sealed until a request with the current number resumes it.
+
 ## Check
 
 ```bash

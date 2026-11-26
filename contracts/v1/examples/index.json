@@ -73,6 +73,12 @@
       "expect": "accepted"
     },
     {
+      "file": "errorNeedsReview.accepted.json",
+      "schema": "collection.schema.json",
+      "definition": "error",
+      "expect": "accepted"
+    },
+    {
       "file": "failureOutcome.accepted.json",
       "schema": "collection.schema.json",
       "definition": "documentOutcome",
