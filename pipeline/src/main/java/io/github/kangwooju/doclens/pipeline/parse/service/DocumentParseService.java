@@ -15,6 +15,7 @@ import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import org.springframework.stereotype.Service;
 
+import io.github.kangwooju.doclens.core.pack.type.DocumentType;
 import io.github.kangwooju.doclens.pipeline.global.id.TextNormalizer;
 import io.github.kangwooju.doclens.pipeline.parse.dto.AsciidocHtml;
 import io.github.kangwooju.doclens.pipeline.parse.dto.AsciidocRules;
@@ -48,7 +49,7 @@ import lombok.RequiredArgsConstructor;
 public class DocumentParseService {
 
     /** 파서 정책 버전, 규칙이 바뀌면 올림 */
-    public static final String PARSER_POLICY_VERSION = "parser-v4";
+    public static final String PARSER_POLICY_VERSION = "parser-v5";
 
     private final ParserProfileStore parserProfileStore;
     private final ParserProfilePolicy parserProfilePolicy;
@@ -67,7 +68,8 @@ public class DocumentParseService {
 
     /**
      * 원본 하나의 구조 산출물, 보류는 DocumentHoldException, 입력 결함은 IllegalArgumentException
-     * includes는 같은 Build의 hash 검증된 include 원본, key는 canonicalUrl
+     * includes는 같은 Build의 hash 검증된 include 원본과 AsciiDoc 쪽 원본, key는 canonicalUrl
+     * AsciiDoc 쪽 원본은 빈 글 xref의 제목 재료로만 읽음
      */
     public StructuredDocument parse(
             SourceDocument source,
@@ -192,7 +194,10 @@ public class DocumentParseService {
                         PARSER_POLICY_VERSION,
                         asciidoc == null ? List
                                 .of() : asciidoc
-                                        .includes()
+                                        .includes(),
+                        asciidoc == null ? List
+                                .of() : asciidoc
+                                        .titleSources()
                 ),
                 withDefaultVariants(
                         extracted
@@ -202,6 +207,24 @@ public class DocumentParseService {
                         asciidoc
                 )
         );
+    }
+
+    /** AsciiDoc 프로필로 변환하는 원본인지 여부, 참이면 같은 Build의 다른 쪽이 xref 제목 재료로 읽음 */
+    public boolean convertsAsciidoc(
+            String project,
+            DocumentType documentType,
+            String finalUrl
+    ) {
+
+        return parserProfileStore
+                .find(
+                        project,
+                        documentType,
+                        finalUrl
+                )
+                .map(profile -> profile
+                        .asciidoc() != null)
+                .orElse(false);
     }
 
     // 필수 입력이 모두 있어야 통과, 빠지면 입력 오류

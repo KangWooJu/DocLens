@@ -12,6 +12,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TimeZone;
+import java.util.TreeMap;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -29,6 +30,7 @@ import io.github.kangwooju.doclens.pipeline.parse.dto.SourceDocument;
 import io.github.kangwooju.doclens.pipeline.parse.dto.StructuredDocument;
 import io.github.kangwooju.doclens.pipeline.parse.dto.StructuredSection;
 import io.github.kangwooju.doclens.pipeline.parse.dto.TabGroup;
+import io.github.kangwooju.doclens.pipeline.parse.dto.TitleSource;
 import io.github.kangwooju.doclens.pipeline.parse.exception.DocumentHoldException;
 import io.github.kangwooju.doclens.pipeline.parse.helper.AsciidocHtmlHelper;
 import io.github.kangwooju.doclens.pipeline.parse.store.ParserProfileStore;
@@ -472,15 +474,169 @@ class AsciidocParseServiceTests {
                 .getFirst()
                 .tags());
         assertEquals(
-                "parser-v4",
+                "parser-v5",
                 document
                         .provenance()
                         .parserPolicyVersion()
         );
         assertEquals(
-                2,
+                3,
                 document
                         .schemaVersion()
+        );
+    }
+
+    @Test
+    @DisplayName("같은 module xref의 빈 글은 같은 Build 쪽의 섹션 제목이나 쪽 제목, 없는 쪽은 경로 글 그대로 세고 제목 준 쪽을 기록")
+    void titlesEmptyXrefs() {
+
+        SourceDocument page = ParseFixtures
+                .asciidocPage("titles.adoc");
+        SourceDocument deep = ParseFixtures
+                .asciidocPage("nested/deep.adoc");
+        Map<String, SourceDocument> inputs = withPages();
+        StructuredDocument document = SERVICE
+                .parse(
+                        page,
+                        inputs
+                );
+        Block links = section(
+                document,
+                "titles.links"
+        )
+                .blocks()
+                .getFirst();
+
+        assertEquals(
+                List
+                        .of(
+                                "Introduction",
+                                "Deep Page",
+                                "Bare URL Links",
+                                "missing.adoc"
+                        ),
+                links
+                        .links()
+                        .stream()
+                        .map(BlockLink::label)
+                        .toList()
+        );
+        assertEquals(
+                List
+                        .of(
+                                "deep.intro",
+                                "",
+                                "titles.bare",
+                                "missing.part"
+                        ),
+                links
+                        .links()
+                        .stream()
+                        .map(BlockLink::targetAnchor)
+                        .toList()
+        );
+        assertEquals(
+                List
+                        .of(new TitleSource(
+                                deep
+                                        .canonicalUrl(),
+                                deep
+                                        .rawSha256()
+                        )),
+                document
+                        .provenance()
+                        .titleSources()
+        );
+
+        Map<String, Integer> counts = ParseFixtures.ASCIIDOC_HTML_HELPER
+                .html(
+                        page,
+                        ParserProfileStore.SPRING_BOOT_ASCIIDOC_REFERENCE
+                                .asciidoc(),
+                        inputs
+                )
+                .counts();
+
+        assertEquals(
+                3,
+                counts
+                        .get("xrefTitles")
+        );
+        assertEquals(
+                1,
+                counts
+                        .get("untitledXrefs")
+        );
+        assertTrue(parse("sample.adoc")
+                .provenance()
+                .titleSources()
+                .isEmpty());
+    }
+
+    @Test
+    @DisplayName("맨 URL 링크 글은 scheme을 숨기고 링크 주소는 그대로")
+    void hidesBareUriScheme() {
+
+        Block bare = section(
+                SERVICE
+                        .parse(
+                                ParseFixtures
+                                        .asciidocPage("titles.adoc"),
+                                INCLUDES
+                        ),
+                "titles.bare"
+        )
+                .blocks()
+                .getFirst();
+
+        assertEquals(
+                "Visit example.org/guide or localhost:8080/health.",
+                bare
+                        .text()
+        );
+        assertEquals(
+                List
+                        .of(
+                                "https://example.org/guide",
+                                "http://localhost:8080/health"
+                        ),
+                bare
+                        .links()
+                        .stream()
+                        .map(BlockLink::href)
+                        .toList()
+        );
+    }
+
+    @Test
+    @DisplayName("javadoc 멤버의 가변 인자는 문자 참조 없이 점 셋")
+    void keepsJavadocVarargs() {
+
+        Block call = section(
+                SERVICE
+                        .parse(
+                                ParseFixtures
+                                        .asciidocPage("titles.adoc"),
+                                INCLUDES
+                        ),
+                "titles.bare"
+        )
+                .blocks()
+                .get(1);
+
+        assertEquals(
+                List
+                        .of("SampleRunner.run(Class, String...)"),
+                call
+                        .inlineCodes()
+                        .stream()
+                        .map(InlineCode::text)
+                        .toList()
+        );
+        assertEquals(
+                "Call SampleRunner.run(Class, String...) to start.",
+                call
+                        .text()
         );
     }
 
@@ -696,6 +852,30 @@ class AsciidocParseServiceTests {
                                 .asciidocPage(page),
                         INCLUDES
                 );
+    }
+
+    // include 전부와 같은 Build의 쪽 둘
+    private static Map<String, SourceDocument> withPages() {
+
+        Map<String, SourceDocument> inputs = new TreeMap<>(INCLUDES);
+
+        for (String path : List
+                .of(
+                        "nested/deep.adoc",
+                        "titles.adoc"
+                )) {
+            SourceDocument page = ParseFixtures
+                    .asciidocPage(path);
+
+            inputs
+                    .put(
+                            page
+                                    .canonicalUrl(),
+                            page
+                    );
+        }
+
+        return inputs;
     }
 
     // 보류 예외

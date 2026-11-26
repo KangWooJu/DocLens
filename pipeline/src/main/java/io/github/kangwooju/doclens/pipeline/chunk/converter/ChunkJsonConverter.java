@@ -18,6 +18,7 @@ import io.github.kangwooju.doclens.pipeline.parse.dto.SectionCitation;
 import io.github.kangwooju.doclens.pipeline.parse.dto.SourcePointer;
 import io.github.kangwooju.doclens.pipeline.parse.dto.TabGroup;
 import io.github.kangwooju.doclens.pipeline.parse.dto.TabVariant;
+import io.github.kangwooju.doclens.pipeline.parse.dto.TitleSource;
 
 /** Pack의 blocksJson, sourceMapJson 열 값, 모두 canonical JSON */
 @Component
@@ -320,6 +321,20 @@ public class ChunkJsonConverter {
                     );
         }
 
+        if (!provenance
+                .titleSources()
+                .isEmpty()) {
+            source
+                    .put(
+                            "titleSources",
+                            provenance
+                                    .titleSources()
+                                    .stream()
+                                    .map(ChunkJsonConverter::titleSource)
+                                    .toList()
+                    );
+        }
+
         return CanonicalJson
                 .write(source);
     }
@@ -471,6 +486,26 @@ public class ChunkJsonConverter {
                         "tags",
                         include
                                 .tags()
+                );
+
+        return entry;
+    }
+
+    // 빈 글 xref에 제목을 준 쪽 하나
+    private static Map<String, Object> titleSource(TitleSource titleSource) {
+
+        Map<String, Object> entry = new LinkedHashMap<>();
+        entry
+                .put(
+                        "url",
+                        titleSource
+                                .url()
+                );
+        entry
+                .put(
+                        "rawSha256",
+                        titleSource
+                                .rawSha256()
                 );
 
         return entry;

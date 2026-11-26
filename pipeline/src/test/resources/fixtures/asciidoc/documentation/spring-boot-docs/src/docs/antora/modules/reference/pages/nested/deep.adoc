@@ -5,3 +5,4 @@
 == Introduction
 
 The deep page links back to xref:sample.adoc#sample.code[the sample code].
+Its overview is xref:sample.adoc[].

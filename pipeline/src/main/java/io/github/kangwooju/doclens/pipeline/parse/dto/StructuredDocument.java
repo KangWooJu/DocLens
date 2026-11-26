@@ -18,7 +18,7 @@ public record StructuredDocument(
 ) {
 
     /** 구조 산출물 형식 버전 */
-    public static final int SCHEMA_VERSION = 2;
+    public static final int SCHEMA_VERSION = 3;
 
     /** 섹션 목록 불변 사본 */
     public StructuredDocument {

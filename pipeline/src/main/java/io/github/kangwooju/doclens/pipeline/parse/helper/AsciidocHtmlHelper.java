@@ -44,6 +44,7 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Element;
 import org.jsoup.nodes.Entities;
 import org.jsoup.nodes.TextNode;
+import org.jsoup.parser.Parser;
 import org.springframework.stereotype.Component;
 
 import io.github.kangwooju.doclens.pipeline.global.id.TextNormalizer;
@@ -51,11 +52,12 @@ import io.github.kangwooju.doclens.pipeline.parse.dto.AsciidocHtml;
 import io.github.kangwooju.doclens.pipeline.parse.dto.AsciidocRules;
 import io.github.kangwooju.doclens.pipeline.parse.dto.ResolvedInclude;
 import io.github.kangwooju.doclens.pipeline.parse.dto.SourceDocument;
+import io.github.kangwooju.doclens.pipeline.parse.dto.TitleSource;
 import lombok.extern.slf4j.Slf4j;
 
 /**
  * AsciiDoc 원본 하나를 기존 HTML 경로가 읽는 HTML로 바꾸는 변환
- * 봉인된 include만 읽고 파일과 네트워크는 쓰지 않음, 못 찾은 대상과 경고, 잔여 글자는 판정 재료로 돌려줌
+ * 봉인된 include와 같은 Build 쪽만 읽고 파일과 네트워크는 쓰지 않음, 못 찾은 대상과 경고, 잔여 글자는 판정 재료로 돌려줌
  * 엔진은 첫 AsciiDoc 문서에서 한 번 만들고 호출별 상태는 호출이 끝나면 비움
  */
 @Slf4j
@@ -76,8 +78,14 @@ public class AsciidocHtmlHelper implements AutoCloseable {
     private static final Pattern CROSS_MODULE_XREF = Pattern
             .compile("xref:([A-Za-z][\\w-]*):([^\\[\\s]+)\\[([^\\]]*)\\]");
 
+    private static final Pattern SAME_MODULE_XREF = Pattern
+            .compile("xref:([^\\[\\s:#]+\\.adoc)(?:#([^\\[\\s]+))?\\[\\]");
+
     private static final Pattern ANCHOR_LINE = Pattern
             .compile("^\\[\\[([^\\],]+)(?:,[^\\]]*)?\\]\\]\\s*$");
+
+    private static final Pattern HEADING_LINE = Pattern
+            .compile("^=+\\s+(.+?)\\s*$");
 
     private static final Pattern MACRO_RESIDUE = Pattern
             .compile("\\b[a-z][a-z0-9-]*::?[^\\s\\[\\]]*\\[");
@@ -102,7 +110,9 @@ public class AsciidocHtmlHelper implements AutoCloseable {
                     "includeCodeBlocks",
                     "includeCodeMacros",
                     "linkAttributes",
-                    "tagFilters"
+                    "tagFilters",
+                    "untitledXrefs",
+                    "xrefTitles"
             );
 
     private static final List<List<String>> CODE_LANGUAGES = List
@@ -155,7 +165,7 @@ public class AsciidocHtmlHelper implements AutoCloseable {
     }
 
     /**
-     * 원본 하나의 HTML과 판정 재료, includes key는 commit 고정 원본 URL
+     * 원본 하나의 HTML과 판정 재료, includes는 같은 Build의 include와 xref 제목 재료인 쪽이고 key는 commit 고정 원본 URL
      * 전역 잠금이라 병렬 parse가 필요해지면 엔진을 호출 단위로 나눔
      */
     public synchronized AsciidocHtml html(
@@ -496,7 +506,7 @@ public class AsciidocHtmlHelper implements AutoCloseable {
                 );
     }
 
-    // 원문 전처리, configprops 블록은 source 블록, 같은 module xref 접두 제거, 다른 module xref는 링크 글
+    // 원문 전처리, configprops 블록은 source 블록, 같은 module xref 접두 제거와 빈 글 채우기, 다른 module xref는 링크 글
     private static String preprocess(
             String text,
             Call call
@@ -538,8 +548,119 @@ public class AsciidocHtmlHelper implements AutoCloseable {
         matcher
                 .appendTail(out);
 
+        return titled(
+                out
+                        .toString(),
+                text,
+                call
+        );
+    }
+
+    // 같은 module xref의 빈 글을 대상 섹션 제목이나 쪽 제목으로, 대상이나 제목을 못 찾으면 그대로 두고 셈
+    private static String titled(
+            String local,
+            String text,
+            Call call
+    ) {
+
+        Matcher matcher = SAME_MODULE_XREF
+                .matcher(local);
+        StringBuilder out = new StringBuilder();
+
+        while (matcher
+                .find()) {
+            String path = matcher
+                    .group(1);
+            String id = matcher
+                    .group(2);
+            String title = call
+                    .title(
+                            path,
+                            id,
+                            text
+                    );
+
+            if (title == null) {
+                call
+                        .count(
+                                "untitledXrefs",
+                                1
+                        );
+
+                continue;
+            }
+
+            matcher
+                    .appendReplacement(
+                            out,
+                            Matcher
+                                    .quoteReplacement("xref:" + path + (id == null ? "" : "#" + id) + "[" + title
+                                            .replace(
+                                                    "]",
+                                                    "\\]"
+                                            ) + "]")
+                    );
+            call
+                    .count(
+                            "xrefTitles",
+                            1
+                    );
+        }
+
+        matcher
+                .appendTail(out);
+
         return out
                 .toString();
+    }
+
+    // 원문에서 섹션 id 바로 다음 제목 줄의 글, id가 null이면 첫 쪽 제목 줄의 글, 없으면 null
+    private static String heading(
+            String text,
+            String id
+    ) {
+
+        List<String> lines = text
+                .lines()
+                .toList();
+        int count = lines
+                .size();
+
+        for (int index = 0; index < count; index++) {
+            String line = lines
+                    .get(index);
+
+            if (id == null) {
+                if (line
+                        .startsWith("= ")) {
+                    return line
+                            .substring(2)
+                            .strip();
+                }
+
+                continue;
+            }
+
+            Matcher anchor = ANCHOR_LINE
+                    .matcher(line);
+
+            if (!anchor
+                    .matches() || !anchor
+                            .group(1)
+                            .equals(id)) {
+                continue;
+            }
+
+            Matcher heading = HEADING_LINE
+                    .matcher(index + 1 < count ? lines
+                            .get(index + 1) : "");
+
+            return heading
+                    .matches() ? heading
+                            .group(1) : null;
+        }
+
+        return null;
     }
 
     // 결정적 속성, 링크 속성 표지, 출처 고정 속성을 모두 소프트 세트로
@@ -755,7 +876,7 @@ public class AsciidocHtmlHelper implements AutoCloseable {
         }
     }
 
-    // 링크 속성 표지 링크를 글만 남기고 풂, 글이 주소 그대로면 원래 속성 참조 글자로
+    // 링크 속성 표지 링크를 글만 남기고 풂, 글이 scheme을 숨긴 주소까지 포함해 주소 그대로면 원래 속성 참조 글자로
     private static void unwrapLinks(
             Element root,
             Call call
@@ -777,9 +898,14 @@ public class AsciidocHtmlHelper implements AutoCloseable {
                             1
                     );
 
-            if (!link
-                    .text()
-                    .equals(href)) {
+            String shown = link
+                    .text();
+
+            if (!shown
+                    .equals(href) && !shown
+                            .equals(href
+                                    .substring("https://"
+                                            .length()))) {
                 link
                         .unwrap();
 
@@ -848,6 +974,9 @@ public class AsciidocHtmlHelper implements AutoCloseable {
                 html,
                 List
                         .copyOf(call.resolved
+                                .values()),
+                List
+                        .copyOf(call.titles
                                 .values()),
                 call.unresolved,
                 anchorLines,
@@ -939,6 +1068,20 @@ public class AsciidocHtmlHelper implements AutoCloseable {
         return null;
     }
 
+    // 매크로보다 먼저 돈 치환의 문자 참조를 글자로 되돌린 글, 말줄임표 치환은 원래 점 셋으로
+    private static String plain(String text) {
+
+        return Parser
+                .unescapeEntities(
+                        text,
+                        false
+                )
+                .replace(
+                        "\u2026\u200B",
+                        "..."
+                );
+    }
+
     // tag가 tags보다 우선하는 태그 지정, 없으면 null
     private static String tagSpec(Map<String, Object> attributes) {
 
@@ -967,6 +1110,7 @@ public class AsciidocHtmlHelper implements AutoCloseable {
         private final String pagePath;
         private final List<String> unresolved = new ArrayList<>();
         private final Map<String, ResolvedInclude> resolved = new LinkedHashMap<>();
+        private final Map<String, TitleSource> titles = new LinkedHashMap<>();
         private final Map<String, Integer> counts = new TreeMap<>();
         private int tabGroups;
 
@@ -1028,6 +1172,64 @@ public class AsciidocHtmlHelper implements AutoCloseable {
                             amount,
                             Integer::sum
                     );
+        }
+
+        // 같은 module 쪽 경로와 섹션 id의 제목, 자기 쪽은 원문에서, 다른 쪽은 같은 Build 입력에서 찾아 기록, 못 찾으면 null
+        private String title(
+                String path,
+                String id,
+                String text
+        ) {
+
+            String target = normalize(path);
+
+            if (target == null) {
+                return null;
+            }
+
+            if (target
+                    .equals(pagePath)) {
+                return heading(
+                        text,
+                        id
+                );
+            }
+
+            String url = commitRoot + rules
+                    .antoraModulesPath() + module + "/pages/" + target;
+            SourceDocument page = includes
+                    .get(url);
+
+            if (page == null) {
+                return null;
+            }
+
+            String title;
+
+            try {
+                title = heading(
+                        TextNormalizer
+                                .decodeUtf8(page
+                                        .rawBytes()),
+                        id
+                );
+            } catch (CharacterCodingException exception) {
+                return null;
+            }
+
+            if (title != null) {
+                titles
+                        .putIfAbsent(
+                                url,
+                                new TitleSource(
+                                        url,
+                                        page
+                                                .rawSha256()
+                                )
+                        );
+            }
+
+            return title;
         }
 
         // 봉인된 include 하나를 태그로 거른 글과 사용 기록, 없으면 null, 읽지 못하면 판정 재료와 빈 글
@@ -1390,7 +1592,7 @@ public class AsciidocHtmlHelper implements AutoCloseable {
                     "quoted",
                     Entities
                             .escape(shown(
-                                    target,
+                                    plain(target),
                                     attributes
                             )),
                     Map
@@ -1413,8 +1615,8 @@ public class AsciidocHtmlHelper implements AutoCloseable {
                     .get("1");
 
             if (given != null) {
-                return String
-                        .valueOf(given);
+                return plain(String
+                        .valueOf(given));
             }
 
             String reference = target
@@ -1467,13 +1669,7 @@ public class AsciidocHtmlHelper implements AutoCloseable {
                     .map(String::strip)
                     .filter(parameter -> !parameter
                             .isEmpty())
-                    .map(parameter -> parameter
-                            .substring(parameter
-                                    .lastIndexOf('.') + 1)
-                            .replace(
-                                    '$',
-                                    '.'
-                            ))
+                    .map(JavadocMacro::simpleName)
                     .collect(Collectors
                             .joining(", "));
 
@@ -1483,6 +1679,28 @@ public class AsciidocHtmlHelper implements AutoCloseable {
                             parameters
                                     .start()
                     ) + "(" + simple + ")";
+        }
+
+        // 매개변수 타입의 단순 이름, 가변 인자의 점 셋은 그대로
+        private static String simpleName(String parameter) {
+
+            String varargs = parameter
+                    .endsWith("...") ? "..." : "";
+            String type = parameter
+                    .substring(
+                            0,
+                            parameter
+                                    .length() - varargs
+                                            .length()
+                    );
+
+            return type
+                    .substring(type
+                            .lastIndexOf('.') + 1)
+                    .replace(
+                            '$',
+                            '.'
+                    ) + varargs;
         }
     }
 
@@ -1498,9 +1716,10 @@ public class AsciidocHtmlHelper implements AutoCloseable {
                 Map<String, Object> attributes
         ) {
 
+            String name = plain(target);
             String shown = "envvar"
                     .equals(attributes
-                            .get("format")) ? target
+                            .get("format")) ? name
                                     .toUpperCase(Locale.ROOT)
                                     .replace(
                                             '.',
@@ -1509,7 +1728,7 @@ public class AsciidocHtmlHelper implements AutoCloseable {
                                     .replace(
                                             "-",
                                             ""
-                                    ) : target;
+                                    ) : name;
 
             return createPhraseNode(
                     parent,

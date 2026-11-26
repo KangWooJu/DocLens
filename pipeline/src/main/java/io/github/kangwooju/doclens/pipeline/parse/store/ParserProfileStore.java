@@ -174,7 +174,9 @@ public class ParserProfileStore {
                     Map
                             .of(
                                     "build-type",
-                                    "opensource"
+                                    "opensource",
+                                    "hide-uri-scheme",
+                                    ""
                             ),
                     "version-spring-boot"
             )
