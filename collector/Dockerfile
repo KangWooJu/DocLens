@@ -1,9 +1,9 @@
 # collector-api와 collector-worker가 함께 쓰는 이미지
 # 저장소 루트의 contracts는 추가 build context로 받음
 # docker build --build-context contracts=contracts -t doclens-collector:local collector
-FROM python:3.13-slim
+FROM python:3.13-slim@sha256:7249d5587b78209a006dc4a3b5340678f84ea729239193aa559962cd8c1fce50
 
-COPY --from=ghcr.io/astral-sh/uv:0.13.5 /uv /bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.13.5@sha256:32a7bb39b496babbd997b0a39a4d66c126bdaf5661b302bf6f06abda8deca6ff /uv /bin/uv
 
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \

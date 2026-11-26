@@ -23,6 +23,9 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
+# Local operator files (collection request template)
+.local/
+
 # Local secrets
 .env
 .env.*

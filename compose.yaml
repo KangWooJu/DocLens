@@ -1,4 +1,6 @@
 # Local PostgreSQL, S3-compatible object store and collector migration (credentials are local-only)
+# Profile app adds collector-api, pipeline and scheduler; profile worker adds the real collector worker
+# The Java services run the jars from build/libs, so build them first and never rebuild them while running
 services:
   postgres:
     image: postgres:17
@@ -34,7 +36,8 @@ services:
 
   collector-migrate:
     image: flyway/flyway:12.11.0
-    profiles: [tools]
+    # app and worker services wait for it with service_completed_successfully
+    profiles: [tools, app, worker]
     depends_on:
       postgres:
         condition: service_healthy
@@ -52,6 +55,105 @@ services:
       - -validateMigrationNaming=true
       - migrate
       - validate
+
+  collector-api:
+    profiles: [app]
+    # Shared with collector-worker, built once
+    image: doclens-collector:local
+    build:
+      context: ./collector
+      additional_contexts:
+        contracts: ./contracts
+    command: ["python", "-m", "collector", "api", "--host", "0.0.0.0", "--port", "8000"]
+    env_file: .env
+    environment:
+      COLLECTOR_DB_URL: postgresql://doclens:doclens@postgres:5432/doclens
+      DOCLENS_S3_ENDPOINT: http://s3mock:9090
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      collector-migrate:
+        condition: service_completed_successfully
+      s3mock:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  # Real crawl over the public internet; CI never starts it and crawls with a loopback harness worker instead
+  collector-worker:
+    profiles: [worker]
+    image: doclens-collector:local
+    build:
+      context: ./collector
+      additional_contexts:
+        contracts: ./contracts
+    command: ["python", "-m", "collector", "work", "--serve"]
+    env_file: .env
+    environment:
+      COLLECTOR_DB_URL: postgresql://doclens:doclens@postgres:5432/doclens
+      DOCLENS_S3_ENDPOINT: http://s3mock:9090
+    depends_on:
+      collector-migrate:
+        condition: service_completed_successfully
+      s3mock:
+        condition: service_healthy
+
+  pipeline:
+    profiles: [app]
+    image: eclipse-temurin:21-jre@sha256:0b99b3376fbb50dbf9c0af8535fdd5b8eb0d3fdfc8b1e4967f383b6919f6901a
+    command: ["java", "-jar", "/app/pipeline.jar"]
+    volumes:
+      - ./pipeline/build/libs:/app:ro
+    env_file: .env
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/doclens
+      SPRING_DATASOURCE_USERNAME: doclens
+      SPRING_DATASOURCE_PASSWORD: doclens
+      DOCLENS_OBJECT_STORE: s3
+      DOCLENS_OBJECT_ROOT: /tmp/doclens
+      DOCLENS_S3_ENDPOINT: http://s3mock:9090
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      s3mock:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8080/actuator/health"]
+      interval: 2s
+      timeout: 5s
+      retries: 60
+
+  scheduler:
+    profiles: [app]
+    image: eclipse-temurin:21-jre@sha256:0b99b3376fbb50dbf9c0af8535fdd5b8eb0d3fdfc8b1e4967f383b6919f6901a
+    # entrypoint, so docker compose run passes its arguments to the jar (--spring.profiles.active=command collect-now <label>)
+    entrypoint: ["java", "-jar", "/app/scheduler-server.jar"]
+    volumes:
+      - ./scheduler-server/build/libs:/app:ro
+      - ./.local:/local:ro
+    env_file: .env
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/doclens
+      SPRING_DATASOURCE_USERNAME: doclens
+      SPRING_DATASOURCE_PASSWORD: doclens
+      DOCLENS_SCHEDULER_COLLECTOR_URL: http://collector-api:8000
+      DOCLENS_SCHEDULER_PIPELINE_URL: http://pipeline:8080
+      DOCLENS_SCHEDULER_REQUEST_FILE: /local/collection-request.json
+    depends_on:
+      collector-api:
+        condition: service_healthy
+      pipeline:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8081/actuator/health"]
+      interval: 2s
+      timeout: 5s
+      retries: 60
 
 volumes:
   postgres-data:
