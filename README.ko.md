@@ -8,6 +8,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/status-early_development-A6E15E?style=flat-square&labelColor=0E1512" alt="Status: early development">
+  <a href="https://github.com/KangWooJu/DocLens/releases/tag/v0.1.0"><img src="https://img.shields.io/badge/release-v0.1.0-A6E15E?style=flat-square&labelColor=0E1512" alt="Release v0.1.0"></a>
   <img src="https://img.shields.io/badge/java-21-F3E7D3?style=flat-square&labelColor=0E1512" alt="Java 21">
   <img src="https://img.shields.io/badge/spring_boot-4.1-F3E7D3?style=flat-square&labelColor=0E1512" alt="Spring Boot 4.1">
   <img src="https://img.shields.io/badge/python-3.13-F3E7D3?style=flat-square&labelColor=0E1512" alt="Python 3.13">
@@ -87,7 +88,7 @@ source: https://github.com/spring-projects/spring-boot/blob/634e6fd…/actuator/
 | C | `pipeline`: 공식 문서 파싱·청킹 | 완료 |
 | D | `pipeline`: 저장과 Pack 내보내기 | 완료 |
 | E | `collector`: 공식 문서 수집(출처: Spring Boot GitHub 저장소) | 완료 |
-| F | `scheduler-server`와 로컬 전체 실행 | 완료(`v0.1.0`) |
+| F | `scheduler-server`와 로컬 전체 실행 | 완료([`v0.1.0`](https://github.com/KangWooJu/DocLens/releases/tag/v0.1.0), 2026-11-27) |
 | G | AWS 배포 | 다음 |
 | | Agent Skill | 예정 |
 
@@ -153,7 +154,13 @@ pipeline과 scheduler 컨테이너는 `pipeline/build/libs`, `scheduler-server/b
 
 ## MCP 서버 사용
 
-Pack은 공개 배포하지 않습니다. 위의 로컬 스택으로 Pack을 만든 뒤 캐시에 설치하고, 에이전트에 서버를 등록합니다. JDK 21이 필요합니다. 서버 jar는 `mcp-server/build/libs/mcp-server-<version>.jar`(`./gradlew :mcp-server:bootJar`) 또는 GitHub Release의 `mcp-server-<version>.jar`입니다.
+Pack은 공개 배포하지 않습니다. 위의 로컬 스택으로 Pack을 만든 뒤 캐시에 설치하고, 에이전트에 서버를 등록합니다. JDK 21이 필요합니다. 서버 jar는 [`v0.1.0` 릴리스](https://github.com/KangWooJu/DocLens/releases/tag/v0.1.0)에서 받아 확인하거나, `./gradlew :mcp-server:bootJar`로 빌드합니다(`mcp-server/build/libs/mcp-server-<version>.jar`).
+
+```bash
+curl -fLO https://github.com/KangWooJu/DocLens/releases/download/v0.1.0/mcp-server-0.1.0.jar
+curl -fLO https://github.com/KangWooJu/DocLens/releases/download/v0.1.0/SHA256SUMS
+shasum -a 256 -c SHA256SUMS
+```
 
 1. 최신 Pack을 캐시에 설치합니다. 서버는 `DOCLENS_CACHE`(절대 경로, 기본값은 macOS `~/Library/Caches/doclens`, Windows `%LOCALAPPDATA%\doclens\cache`, 그 밖에는 `$XDG_CACHE_HOME/doclens` 또는 `~/.cache/doclens`) 아래 `packs/<packId>/<buildId>/<sha256>.pack`을 읽고, 시작할 때 파일마다 sha256을 확인합니다.
 
