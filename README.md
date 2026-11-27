@@ -31,10 +31,10 @@
 
 Your agent asks the web about Spring Security 7. The web answers with a 2019 blog post about `WebSecurityConfigurerAdapter`. Your agent believes it.
 
-DocLens hands your agent the official Spring docs for the exact version your project uses, already collected, cleaned and indexed into a local file. Every result carries its source: URL, heading path, version. The agent reads the right page of the right version, and says where it read it.
+DocLens hands your agent the official Spring docs for the exact version your project uses, already collected, cleaned and indexed into a local file. The docs are built from the documentation sources in the Spring project's own GitHub repository (Apache-2.0), not scraped from the docs website. Every result carries its source: URL, heading path, version. The agent reads the right page of the right version, and says where it read it.
 
 > [!NOTE]
-> DocLens is in early development. `v0.1.0` runs the whole build side locally (scheduler, collector, pipeline) and searches the resulting Pack with the local MCP server. The Agent Skill and the AWS deployment are next. Anything marked *planned* does not work yet.
+> DocLens is in early development. `v0.1.0` runs the whole build side locally (scheduler, collector, pipeline) and searches the resulting Pack with the local MCP server. The Agent Skill and the AWS deployment are next. Covered today: the Spring Boot 4.1.2 reference documentation. Anything marked *planned* does not work yet.
 
 ## Why
 
@@ -57,11 +57,11 @@ A cited source that exists is not the same as a source that supports the claim. 
  build side (maintainer)                         your machine
 ┌────────────────────────────────────┐          ┌──────────────────────────────────────┐
 │ scheduler   when to collect        │          │ coding agent (Claude Code, Codex ..) │
-│ collector   fetch official docs    │          │   │  Agent Skill: how to research    │
+│ collector   fetch docs from GitHub │          │   │  Agent Skill: how to research    │
 │ pipeline    parse · chunk · index  │          │   ▼                                  │
 │             export one Pack        │──Pack──▶ │ mcp-server   read-only, local, STDIO │
 └────────────────────────────────────┘          │   ▼                                  │
-                                                │ spring-security@7.0.2.pack (SQLite)  │
+                                                │ spring-boot@4.1.2.pack (SQLite)      │
                                                 └──────────────────────────────────────┘
 ```
 
@@ -99,7 +99,7 @@ https://docs.spring.io/spring-security/reference/...
 | `mcp-server/` | Local STDIO MCP server |
 | `pipeline/` | Parse, chunk, store and export Packs |
 | `scheduler-server/` | Schedules collection and processing |
-| `collector/` | Python collector for official docs |
+| `collector/` | Python collector for the documentation sources on GitHub |
 | `contracts/` | JSON Schemas, examples and golden vectors shared across languages |
 | `tools/` | Contract checker |
 | `maintenance-cli/` | Operator tool *(planned)* |
@@ -196,4 +196,8 @@ The Build stays well under the 120 s processing read timeout, so the timeout is 
 
 [MIT](LICENSE)
 
-DocLens is not affiliated with or endorsed by the Spring project or Broadcom. Spring documentation remains under its own license.
+DocLens code is MIT. The documentation inside a Pack is not: it comes from the Spring Boot reference documentation and examples in [spring-projects/spring-boot](https://github.com/spring-projects/spring-boot), Copyright 2012-present the original author or authors, licensed under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). DocLens converts the AsciiDoc sources and splits them into sections and chunks; every Pack records this notice, and every document URL pins the source commit.
+
+DocLens does not collect from docs.spring.io. Citation links may point there so you can read the rendered page.
+
+DocLens is not affiliated with or endorsed by the Spring project or Broadcom. Spring is a trademark of Broadcom Inc. and/or its subsidiaries.

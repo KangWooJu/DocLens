@@ -31,10 +31,10 @@
 
 에이전트가 웹에 Spring Security 7을 묻습니다. 웹은 `WebSecurityConfigurerAdapter`를 쓰는 2019년 블로그 글로 답합니다. 에이전트는 그 글을 믿습니다.
 
-DocLens는 프로젝트가 쓰는 바로 그 버전의 Spring 공식 문서를, 미리 수집·정제·색인한 로컬 파일로 에이전트에게 건넵니다. 모든 결과에는 출처(URL, 제목 경로, 버전)가 붙습니다. 에이전트는 맞는 버전의 맞는 쪽을 읽고, 어디서 읽었는지 밝힙니다.
+DocLens는 프로젝트가 쓰는 바로 그 버전의 Spring 공식 문서를, 미리 수집·정제·색인한 로컬 파일로 에이전트에게 건넵니다. 문서는 문서 사이트를 긁어 오지 않고, Spring 프로젝트의 GitHub 저장소에 있는 문서 원본(Apache-2.0)으로 만듭니다. 모든 결과에는 출처(URL, 제목 경로, 버전)가 붙습니다. 에이전트는 맞는 버전의 맞는 쪽을 읽고, 어디서 읽었는지 밝힙니다.
 
 > [!NOTE]
-> DocLens는 개발 초기 단계입니다. `v0.1.0`은 빌드 쪽 전체(scheduler, collector, pipeline)를 로컬에서 실행하고, 만들어진 Pack을 로컬 MCP 서버로 검색합니다. Agent Skill과 AWS 배포는 다음 단계입니다. *예정*으로 표시된 기능은 아직 동작하지 않습니다.
+> DocLens는 개발 초기 단계입니다. `v0.1.0`은 빌드 쪽 전체(scheduler, collector, pipeline)를 로컬에서 실행하고, 만들어진 Pack을 로컬 MCP 서버로 검색합니다. Agent Skill과 AWS 배포는 다음 단계입니다. 지금 다루는 문서는 Spring Boot 4.1.2 Reference입니다. *예정*으로 표시된 기능은 아직 동작하지 않습니다.
 
 ## 왜 필요한가
 
@@ -57,11 +57,11 @@ DocLens는 반복되는 일을 모델 밖으로 옮깁니다.
  build side (maintainer)                         your machine
 ┌────────────────────────────────────┐          ┌──────────────────────────────────────┐
 │ scheduler   when to collect        │          │ coding agent (Claude Code, Codex ..) │
-│ collector   fetch official docs    │          │   │  Agent Skill: how to research    │
+│ collector   fetch docs from GitHub │          │   │  Agent Skill: how to research    │
 │ pipeline    parse · chunk · index  │          │   ▼                                  │
 │             export one Pack        │──Pack──▶ │ mcp-server   read-only, local, STDIO │
 └────────────────────────────────────┘          │   ▼                                  │
-                                                │ spring-security@7.0.2.pack (SQLite)  │
+                                                │ spring-boot@4.1.2.pack (SQLite)      │
                                                 └──────────────────────────────────────┘
 ```
 
@@ -99,7 +99,7 @@ https://docs.spring.io/spring-security/reference/...
 | `mcp-server/` | 로컬 STDIO MCP 서버 |
 | `pipeline/` | 파싱, 청킹, 저장, Pack 내보내기 |
 | `scheduler-server/` | 수집·가공 일정 관리 |
-| `collector/` | 공식 문서 Python 수집기 |
+| `collector/` | GitHub 문서 원본 Python 수집기 |
 | `contracts/` | 언어 간 공유 JSON Schema, 예시, golden 값 |
 | `tools/` | 계약 검사 스크립트 |
 | `maintenance-cli/` | 운영 도구 *(예정)* |
@@ -196,4 +196,8 @@ Build 시간이 처리 요청 read timeout 120초보다 한참 짧아 timeout은
 
 [MIT](LICENSE)
 
-DocLens는 Spring 프로젝트나 Broadcom과 관계가 없으며 그들의 보증을 받지 않습니다. Spring 문서는 각자의 라이선스를 따릅니다.
+DocLens 코드는 MIT입니다. Pack 안의 문서는 다릅니다. [spring-projects/spring-boot](https://github.com/spring-projects/spring-boot)의 Spring Boot Reference 문서와 예제이고, Copyright 2012-present the original author or authors, [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0)을 따릅니다. DocLens는 AsciiDoc 원본을 변환해 섹션과 청크로 나눕니다. 모든 Pack에 이 고지가 들어가고, 문서 URL마다 원본 커밋이 고정됩니다.
+
+DocLens는 docs.spring.io에서 수집하지 않습니다. 인용 링크는 렌더링된 페이지를 읽을 수 있도록 그곳을 가리킬 수 있습니다.
+
+DocLens는 Spring 프로젝트나 Broadcom과 관계가 없으며 그들의 보증을 받지 않습니다. Spring은 Broadcom Inc. 및 자회사의 상표입니다.
