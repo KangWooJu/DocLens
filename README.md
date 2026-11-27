@@ -31,10 +31,10 @@
 
 Your agent asks the web about Spring Security 7. The web answers with a 2019 blog post about `WebSecurityConfigurerAdapter`. Your agent believes it.
 
-DocLens hands your agent the official Spring docs for the exact version your project uses, already collected, cleaned and indexed into a local file. Every result carries its source: URL, heading path, version. The agent reads the right page of the right version, and says where it read it.
+DocLens hands your agent the official Spring docs for the exact version your project uses, already collected, cleaned and indexed into a local file. The docs are built from the documentation sources in the Spring project's own GitHub repository (Apache-2.0), not scraped from the docs website. Every result carries its source: URL, heading path, version. The agent reads the right page of the right version, and says where it read it.
 
 > [!NOTE]
-> DocLens is in early development. The Pack format and its validating reader exist; the MCP server, the Agent Skill and the collection pipeline are being built. Anything marked *planned* does not work yet.
+> DocLens is in early development. `v0.1.0` runs the whole build side locally (scheduler, collector, pipeline) and searches the resulting Pack with the local MCP server. The Agent Skill and the AWS deployment are next. Covered today: the Spring Boot 4.1.2 reference documentation. Anything marked *planned* does not work yet.
 
 ## Why
 
@@ -57,25 +57,25 @@ A cited source that exists is not the same as a source that supports the claim. 
  build side (maintainer)                         your machine
 ┌────────────────────────────────────┐          ┌──────────────────────────────────────┐
 │ scheduler   when to collect        │          │ coding agent (Claude Code, Codex ..) │
-│ collector   fetch official docs    │          │   │  Agent Skill: how to research    │
+│ collector   fetch docs from GitHub │          │   │  Agent Skill: how to research    │
 │ pipeline    parse · chunk · index  │          │   ▼                                  │
 │             export one Pack        │──Pack──▶ │ mcp-server   read-only, local, STDIO │
 └────────────────────────────────────┘          │   ▼                                  │
-                                                │ spring-security@7.0.2.pack (SQLite)  │
+                                                │ spring-boot@4.1.2.pack (SQLite)      │
                                                 └──────────────────────────────────────┘
 ```
 
 - **Knowledge Pack.** One SQLite file per documentation version: documents, sections, chunks, code variants, identifiers, links and a full-text index. A logical content hash identifies the same content across builds. The reader validates a Pack completely before anything searches it.
-- **Local MCP server** *(planned)*. Runs on your machine over STDIO and answers from installed Packs only. No remote search service: searches never leave your machine. Read-only: it never edits your project or runs shell commands.
+- **Local MCP server**. Runs on your machine over STDIO and answers from installed Packs only. No remote search service: searches never leave your machine. Read-only: it never edits your project or runs shell commands.
 - **Agent Skill** *(planned)*. A plain prompt file that tells your agent which version to check, how to search within a budget, and how to cite. No extra LLM API: your own agent does the writing.
 
-Planned search result shape (illustrative):
+Search result shape, trimmed from a `search_docs` call on the Spring Boot 4.1.2 Pack:
 
 ```
-spring-security@7.0.2 · Servlet Applications › Configuration › Java Configuration
-https://docs.spring.io/spring-security/reference/...
-  @Bean
-  SecurityFilterChain filterChain(HttpSecurity http) throws Exception { ... }
+spring-boot@4.1.2 · Endpoints › Hypermedia for Actuator Web Endpoints
+https://docs.spring.io/spring-boot/4.1/reference/actuator/endpoints.html#actuator.endpoints.hypermedia
+source: https://github.com/spring-projects/spring-boot/blob/634e6fd…/actuator/endpoints.adoc?plain=1#L344
+  (section text, code variants, block ids and source pointers follow)
 ```
 
 ## Status
@@ -83,24 +83,23 @@ https://docs.spring.io/spring-security/reference/...
 | Step | What | State |
 |---|---|---|
 | A | Cross-language contracts, Pack v1 writer and validating reader | Done |
-| B | `mcp-server`: search over installed Packs | Next |
-| C | `pipeline`: parse and chunk official docs | Planned |
-| D | `pipeline`: store and export Packs | Planned |
-| E | `collector`: fetch official docs | Planned |
-| F | `scheduler-server` and a local end-to-end run | Planned |
-| G | Deployment on AWS | Planned |
-
-The first release, `v0.1.0`, is planned for when the MCP server can search a Pack.
+| B | `mcp-server`: search over installed Packs | Done |
+| C | `pipeline`: parse and chunk official docs | Done |
+| D | `pipeline`: store and export Packs | Done |
+| E | `collector`: fetch official docs (source: the Spring Boot GitHub repository) | Done |
+| F | `scheduler-server` and a local end-to-end run | Done (`v0.1.0`) |
+| G | Deployment on AWS | Next |
+| | Agent Skill | Planned |
 
 ## Repository layout
 
 | Path | What |
 |---|---|
 | `knowledge-core/` | Pack format: canonical JSON, Pack writer and reader, shared by `pipeline` and `mcp-server` |
-| `mcp-server/` | Local STDIO MCP server *(planned)* |
-| `pipeline/` | Parse, chunk, store and export Packs *(planned)* |
-| `scheduler-server/` | Schedules collection and processing *(planned)* |
-| `collector/` | Python collector for official docs *(planned)* |
+| `mcp-server/` | Local STDIO MCP server |
+| `pipeline/` | Parse, chunk, store and export Packs |
+| `scheduler-server/` | Schedules collection and processing |
+| `collector/` | Python collector for the documentation sources on GitHub |
 | `contracts/` | JSON Schemas, examples and golden vectors shared across languages |
 | `tools/` | Contract checker |
 | `maintenance-cli/` | Operator tool *(planned)* |
@@ -152,6 +151,26 @@ Requires Docker with Compose. Copy `.env.example` to `.env` and fill in the coll
 
 The pipeline and scheduler containers run the jars in `pipeline/build/libs` and `scheduler-server/build/libs`. Do not rebuild them while the stack runs; stop it first with `docker compose --profile app --profile worker down`.
 
+## Use the MCP server
+
+Packs are not published. Build one with the local stack above, then install it and register the server with your agent. Requires JDK 21. The server jar is `mcp-server/build/libs/mcp-server-<version>.jar` (`./gradlew :mcp-server:bootJar`) or the `mcp-server-<version>.jar` asset of a GitHub Release.
+
+1. Install the latest Pack into the cache. The server reads `packs/<packId>/<buildId>/<sha256>.pack` under `DOCLENS_CACHE` (an absolute path; default `~/Library/Caches/doclens` on macOS, `%LOCALAPPDATA%\doclens\cache` on Windows, `$XDG_CACHE_HOME/doclens` or `~/.cache/doclens` elsewhere) and checks each file's sha256 at startup:
+
+   ```bash
+   export DOCLENS_CACHE="$HOME/Library/Caches/doclens"
+   key=$(curl -sf http://127.0.0.1:9090/doclens/packs/<packId>/publications/<sequence>.json | python3 -c "import json,sys;print(json.load(sys.stdin)['objectKey'])")
+   mkdir -p "$DOCLENS_CACHE/$(dirname "$key")" && curl -sf -o "$DOCLENS_CACHE/$key" "http://127.0.0.1:9090/doclens/$key"
+   ```
+
+2. Register the server, for example with Claude Code:
+
+   ```bash
+   claude mcp add doclens -e DOCLENS_CACHE="$DOCLENS_CACHE" -- java -jar /absolute/path/to/mcp-server-0.1.0.jar
+   ```
+
+3. Tools: `get_status`, `list_projects`, `list_versions`, `search_docs` (`exactVersion` is required). Packs are read once at startup; restart the server after installing a new one.
+
 ## Phase 1 measurement
 
 One real run on 2026-11-27 (KST): Spring Boot `v4.1.2` reference docs at commit `634e6fd`, fetched from GitHub by the collector and built by the pipeline jar. The values come from that single run.
@@ -177,4 +196,8 @@ The Build stays well under the 120 s processing read timeout, so the timeout is 
 
 [MIT](LICENSE)
 
-DocLens is not affiliated with or endorsed by the Spring project or Broadcom. Spring documentation remains under its own license.
+DocLens code is MIT. The documentation inside a Pack is not: it comes from the Spring Boot reference documentation and examples in [spring-projects/spring-boot](https://github.com/spring-projects/spring-boot), Copyright 2012-present the original author or authors, licensed under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). DocLens converts the AsciiDoc sources and splits them into sections and chunks; every Pack records this notice, and every document URL pins the source commit.
+
+DocLens does not collect from docs.spring.io. Citation links may point there so you can read the rendered page.
+
+DocLens is not affiliated with or endorsed by the Spring project or Broadcom. Spring is a trademark of Broadcom Inc. and/or its subsidiaries.

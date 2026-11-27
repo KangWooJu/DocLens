@@ -31,10 +31,10 @@
 
 에이전트가 웹에 Spring Security 7을 묻습니다. 웹은 `WebSecurityConfigurerAdapter`를 쓰는 2019년 블로그 글로 답합니다. 에이전트는 그 글을 믿습니다.
 
-DocLens는 프로젝트가 쓰는 바로 그 버전의 Spring 공식 문서를, 미리 수집·정제·색인한 로컬 파일로 에이전트에게 건넵니다. 모든 결과에는 출처(URL, 제목 경로, 버전)가 붙습니다. 에이전트는 맞는 버전의 맞는 쪽을 읽고, 어디서 읽었는지 밝힙니다.
+DocLens는 프로젝트가 쓰는 바로 그 버전의 Spring 공식 문서를, 미리 수집·정제·색인한 로컬 파일로 에이전트에게 건넵니다. 문서는 문서 사이트를 긁어 오지 않고, Spring 프로젝트의 GitHub 저장소에 있는 문서 원본(Apache-2.0)으로 만듭니다. 모든 결과에는 출처(URL, 제목 경로, 버전)가 붙습니다. 에이전트는 맞는 버전의 맞는 쪽을 읽고, 어디서 읽었는지 밝힙니다.
 
 > [!NOTE]
-> DocLens는 개발 초기 단계입니다. Pack 형식과 이를 검증하는 Reader는 완성됐고, MCP 서버·Agent Skill·수집 파이프라인은 만드는 중입니다. *예정*으로 표시된 기능은 아직 동작하지 않습니다.
+> DocLens는 개발 초기 단계입니다. `v0.1.0`은 빌드 쪽 전체(scheduler, collector, pipeline)를 로컬에서 실행하고, 만들어진 Pack을 로컬 MCP 서버로 검색합니다. Agent Skill과 AWS 배포는 다음 단계입니다. 지금 다루는 문서는 Spring Boot 4.1.2 Reference입니다. *예정*으로 표시된 기능은 아직 동작하지 않습니다.
 
 ## 왜 필요한가
 
@@ -57,25 +57,25 @@ DocLens는 반복되는 일을 모델 밖으로 옮깁니다.
  build side (maintainer)                         your machine
 ┌────────────────────────────────────┐          ┌──────────────────────────────────────┐
 │ scheduler   when to collect        │          │ coding agent (Claude Code, Codex ..) │
-│ collector   fetch official docs    │          │   │  Agent Skill: how to research    │
+│ collector   fetch docs from GitHub │          │   │  Agent Skill: how to research    │
 │ pipeline    parse · chunk · index  │          │   ▼                                  │
 │             export one Pack        │──Pack──▶ │ mcp-server   read-only, local, STDIO │
 └────────────────────────────────────┘          │   ▼                                  │
-                                                │ spring-security@7.0.2.pack (SQLite)  │
+                                                │ spring-boot@4.1.2.pack (SQLite)      │
                                                 └──────────────────────────────────────┘
 ```
 
 - **Knowledge Pack.** 문서 버전마다 SQLite 파일 하나입니다. 문서, 섹션, 청크, 코드 변형, 식별자, 링크, 전문 검색 색인이 들어 있습니다. 논리 내용 해시로 빌드가 달라도 같은 내용인지 알 수 있습니다. Reader는 검색 전에 Pack 전체를 검증합니다.
-- **로컬 MCP 서버** *(예정)*. 사용자 PC에서 STDIO로 실행되고, 설치된 Pack만으로 답합니다. 원격 검색 서비스가 없어 검색 요청이 PC 밖으로 나가지 않습니다. 읽기 전용이라 프로젝트 파일을 고치거나 셸 명령을 실행하지 않습니다.
+- **로컬 MCP 서버**. 사용자 PC에서 STDIO로 실행되고, 설치된 Pack만으로 답합니다. 원격 검색 서비스가 없어 검색 요청이 PC 밖으로 나가지 않습니다. 읽기 전용이라 프로젝트 파일을 고치거나 셸 명령을 실행하지 않습니다.
 - **Agent Skill** *(예정)*. 어떤 버전을 확인하고, 예산 안에서 어떻게 검색하고, 어떻게 인용할지 에이전트에게 알려 주는 프롬프트 파일입니다. 별도 LLM API 없이 사용자의 에이전트가 직접 씁니다.
 
-예정된 검색 결과 형태(예시):
+검색 결과 형태(Spring Boot 4.1.2 Pack에 `search_docs`를 호출한 결과를 줄임):
 
 ```
-spring-security@7.0.2 · Servlet Applications › Configuration › Java Configuration
-https://docs.spring.io/spring-security/reference/...
-  @Bean
-  SecurityFilterChain filterChain(HttpSecurity http) throws Exception { ... }
+spring-boot@4.1.2 · Endpoints › Hypermedia for Actuator Web Endpoints
+https://docs.spring.io/spring-boot/4.1/reference/actuator/endpoints.html#actuator.endpoints.hypermedia
+source: https://github.com/spring-projects/spring-boot/blob/634e6fd…/actuator/endpoints.adoc?plain=1#L344
+  (section text, code variants, block ids and source pointers follow)
 ```
 
 ## 진행 상황
@@ -83,24 +83,23 @@ https://docs.spring.io/spring-security/reference/...
 | 단계 | 내용 | 상태 |
 |---|---|---|
 | A | 언어 간 계약, Pack v1 Writer와 검증 Reader | 완료 |
-| B | `mcp-server`: 설치된 Pack 검색 | 다음 |
-| C | `pipeline`: 공식 문서 파싱·청킹 | 예정 |
-| D | `pipeline`: 저장과 Pack 내보내기 | 예정 |
-| E | `collector`: 공식 문서 수집 | 예정 |
-| F | `scheduler-server`와 로컬 전체 실행 | 예정 |
-| G | AWS 배포 | 예정 |
-
-첫 릴리스 `v0.1.0`은 MCP 서버가 Pack을 검색할 수 있게 되는 시점에 낼 예정입니다.
+| B | `mcp-server`: 설치된 Pack 검색 | 완료 |
+| C | `pipeline`: 공식 문서 파싱·청킹 | 완료 |
+| D | `pipeline`: 저장과 Pack 내보내기 | 완료 |
+| E | `collector`: 공식 문서 수집(출처: Spring Boot GitHub 저장소) | 완료 |
+| F | `scheduler-server`와 로컬 전체 실행 | 완료(`v0.1.0`) |
+| G | AWS 배포 | 다음 |
+| | Agent Skill | 예정 |
 
 ## 저장소 구성
 
 | 경로 | 내용 |
 |---|---|
 | `knowledge-core/` | Pack 형식: canonical JSON, Pack Writer·Reader. `pipeline`과 `mcp-server`가 함께 사용 |
-| `mcp-server/` | 로컬 STDIO MCP 서버 *(예정)* |
-| `pipeline/` | 파싱, 청킹, 저장, Pack 내보내기 *(예정)* |
-| `scheduler-server/` | 수집·가공 일정 관리 *(예정)* |
-| `collector/` | 공식 문서 Python 수집기 *(예정)* |
+| `mcp-server/` | 로컬 STDIO MCP 서버 |
+| `pipeline/` | 파싱, 청킹, 저장, Pack 내보내기 |
+| `scheduler-server/` | 수집·가공 일정 관리 |
+| `collector/` | GitHub 문서 원본 Python 수집기 |
 | `contracts/` | 언어 간 공유 JSON Schema, 예시, golden 값 |
 | `tools/` | 계약 검사 스크립트 |
 | `maintenance-cli/` | 운영 도구 *(예정)* |
@@ -152,6 +151,26 @@ Docker와 Compose가 필요합니다. `.env.example`을 `.env`로 복사해 coll
 
 pipeline과 scheduler 컨테이너는 `pipeline/build/libs`, `scheduler-server/build/libs`의 jar를 그대로 실행합니다. 스택이 도는 동안 jar를 다시 빌드하지 말고, 먼저 `docker compose --profile app --profile worker down`으로 내립니다.
 
+## MCP 서버 사용
+
+Pack은 공개 배포하지 않습니다. 위의 로컬 스택으로 Pack을 만든 뒤 캐시에 설치하고, 에이전트에 서버를 등록합니다. JDK 21이 필요합니다. 서버 jar는 `mcp-server/build/libs/mcp-server-<version>.jar`(`./gradlew :mcp-server:bootJar`) 또는 GitHub Release의 `mcp-server-<version>.jar`입니다.
+
+1. 최신 Pack을 캐시에 설치합니다. 서버는 `DOCLENS_CACHE`(절대 경로, 기본값은 macOS `~/Library/Caches/doclens`, Windows `%LOCALAPPDATA%\doclens\cache`, 그 밖에는 `$XDG_CACHE_HOME/doclens` 또는 `~/.cache/doclens`) 아래 `packs/<packId>/<buildId>/<sha256>.pack`을 읽고, 시작할 때 파일마다 sha256을 확인합니다.
+
+   ```bash
+   export DOCLENS_CACHE="$HOME/Library/Caches/doclens"
+   key=$(curl -sf http://127.0.0.1:9090/doclens/packs/<packId>/publications/<sequence>.json | python3 -c "import json,sys;print(json.load(sys.stdin)['objectKey'])")
+   mkdir -p "$DOCLENS_CACHE/$(dirname "$key")" && curl -sf -o "$DOCLENS_CACHE/$key" "http://127.0.0.1:9090/doclens/$key"
+   ```
+
+2. 서버를 등록합니다. Claude Code 예:
+
+   ```bash
+   claude mcp add doclens -e DOCLENS_CACHE="$DOCLENS_CACHE" -- java -jar /absolute/path/to/mcp-server-0.1.0.jar
+   ```
+
+3. Tool: `get_status`, `list_projects`, `list_versions`, `search_docs`(`exactVersion` 필수). Pack은 시작할 때 한 번 읽으므로 새 Pack을 설치하면 서버를 다시 시작합니다.
+
 ## Phase 1 측정
 
 2026-11-27(KST) 실제 실행 1회: Spring Boot `v4.1.2` reference 문서(commit `634e6fd`)를 collector가 GitHub에서 받고 pipeline jar가 Build했습니다. 값은 모두 이 한 번의 실행에서 나왔습니다.
@@ -177,4 +196,8 @@ Build 시간이 처리 요청 read timeout 120초보다 한참 짧아 timeout은
 
 [MIT](LICENSE)
 
-DocLens는 Spring 프로젝트나 Broadcom과 관계가 없으며 그들의 보증을 받지 않습니다. Spring 문서는 각자의 라이선스를 따릅니다.
+DocLens 코드는 MIT입니다. Pack 안의 문서는 다릅니다. [spring-projects/spring-boot](https://github.com/spring-projects/spring-boot)의 Spring Boot Reference 문서와 예제이고, Copyright 2012-present the original author or authors, [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0)을 따릅니다. DocLens는 AsciiDoc 원본을 변환해 섹션과 청크로 나눕니다. 모든 Pack에 이 고지가 들어가고, 문서 URL마다 원본 커밋이 고정됩니다.
+
+DocLens는 docs.spring.io에서 수집하지 않습니다. 인용 링크는 렌더링된 페이지를 읽을 수 있도록 그곳을 가리킬 수 있습니다.
+
+DocLens는 Spring 프로젝트나 Broadcom과 관계가 없으며 그들의 보증을 받지 않습니다. Spring은 Broadcom Inc. 및 자회사의 상표입니다.
