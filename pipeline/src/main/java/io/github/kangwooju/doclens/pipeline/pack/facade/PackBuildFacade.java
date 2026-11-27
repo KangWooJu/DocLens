@@ -1,0 +1,616 @@
+package io.github.kangwooju.doclens.pipeline.pack.facade;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.stereotype.Component;
+
+import io.github.kangwooju.doclens.core.pack.dto.PackDocument;
+import io.github.kangwooju.doclens.core.pack.writer.PackWriter;
+import io.github.kangwooju.doclens.pipeline.chunk.service.ChunkService;
+import io.github.kangwooju.doclens.pipeline.collected.dto.ProcessRequest;
+import io.github.kangwooju.doclens.pipeline.collected.dto.ProcessingReceipt;
+import io.github.kangwooju.doclens.pipeline.collected.service.CollectedRunService;
+import io.github.kangwooju.doclens.pipeline.global.transaction.TransactionExecutor;
+import io.github.kangwooju.doclens.pipeline.pack.dto.ArtifactRow;
+import io.github.kangwooju.doclens.pipeline.pack.dto.BuildRequest;
+import io.github.kangwooju.doclens.pipeline.pack.dto.BuildResult;
+import io.github.kangwooju.doclens.pipeline.pack.dto.BuildRow;
+import io.github.kangwooju.doclens.pipeline.pack.dto.BuildState;
+import io.github.kangwooju.doclens.pipeline.pack.dto.ExportTarget;
+import io.github.kangwooju.doclens.pipeline.pack.dto.PackRecord;
+import io.github.kangwooju.doclens.pipeline.pack.dto.ProcessingConfig;
+import io.github.kangwooju.doclens.pipeline.pack.dto.SourceEntry;
+import io.github.kangwooju.doclens.pipeline.pack.dto.SourceRead;
+import io.github.kangwooju.doclens.pipeline.pack.exception.BuildFailedException;
+import io.github.kangwooju.doclens.pipeline.pack.exception.BuildNeedsReviewException;
+import io.github.kangwooju.doclens.pipeline.pack.exception.BuildNotExportableException;
+import io.github.kangwooju.doclens.pipeline.pack.exception.BuildPendingException;
+import io.github.kangwooju.doclens.pipeline.pack.exception.PublicationConflictException;
+import io.github.kangwooju.doclens.pipeline.pack.service.BuildService;
+import io.github.kangwooju.doclens.pipeline.pack.service.PackExportService;
+import io.github.kangwooju.doclens.pipeline.pack.service.ProcessingConfigService;
+import io.github.kangwooju.doclens.pipeline.pack.service.PublicationService;
+import io.github.kangwooju.doclens.pipeline.pack.type.BuildStatus;
+import io.github.kangwooju.doclens.pipeline.pack.type.SourceReadOutcome;
+import io.github.kangwooju.doclens.pipeline.parse.dto.SourceDocument;
+import io.github.kangwooju.doclens.pipeline.parse.dto.StructuredDocument;
+import io.github.kangwooju.doclens.pipeline.parse.exception.DocumentHoldException;
+import io.github.kangwooju.doclens.pipeline.parse.service.DocumentParseService;
+import lombok.RequiredArgsConstructor;
+
+/**
+ * 원본에서 Pack까지의 순서와 트랜잭션 범위
+ * 같은 요청을 다시 보내면 산출물이 없는 문서부터 이어 감
+ */
+@Component
+@RequiredArgsConstructor
+public class PackBuildFacade {
+
+    private final ProcessingConfigService processingConfigService;
+    private final BuildService buildService;
+    private final PackExportService packExportService;
+    private final DocumentParseService documentParseService;
+    private final ChunkService chunkService;
+    private final TransactionExecutor transactionExecutor;
+    private final CollectedRunService collectedRunService;
+    private final PublicationService publicationService;
+
+    // readyRun마다 처리 하나, 인스턴스 하나 기준이고 항목이 readyRun마다 하나라 하루 하나씩 늘어남, 인스턴스가 둘이 되면 PostgreSQL advisory lock
+    private final ConcurrentMap<String, Object> inFlight = new ConcurrentHashMap<>();
+
+    /**
+     * contracts processRequest 하나를 요청 스레드에서 Build, Export, 발행까지 처리하고 receipt 반환
+     * 같은 readyRun 요청은 한 번에 하나, 같은 본문 재전송은 같은 Build의 receipt
+     * 결과가 RUNNING, NEEDS_REVIEW, FAILED이면 결과별 예외, 발행 번호 불일치는 PublicationConflictException
+     */
+    public ProcessingReceipt process(String processRequestJson) {
+
+        ProcessRequest processRequest = collectedRunService
+                .processRequest(processRequestJson);
+        Object lock = inFlight
+                .computeIfAbsent(
+                        processRequest
+                                .readyRunId(),
+                        readyRunId -> new Object()
+                );
+
+        synchronized (lock) {
+            BuildRequest request = collectedRunService
+                    .requests(
+                            processRequest
+                                    .body(),
+                            processRequest
+                                    .processingConfigHash()
+                    )
+                    .getFirst();
+            BuildResult result = build(
+                    request,
+                    processRequest
+                            .expectedPublicationSequence()
+            );
+
+            return receipt(
+                    request,
+                    published(result)
+            );
+        }
+    }
+
+    /** project와 정확 버전의 최신 publication manifest canonical JSON, 객체가 없으면 같은 bytes로 게시, 발행이 없으면 빈 값 */
+    public Optional<String> latestPublication(
+            String project,
+            String exactVersion
+    ) {
+
+        return transactionExecutor
+                .write(() -> publicationService
+                        .latest(
+                                project,
+                                exactVersion
+                        ))
+                .map(published -> {
+                    publicationService
+                            .ensureManifest(published);
+
+                    return publicationService
+                            .manifest(published);
+                });
+    }
+
+    /** 지금 JVM이 적용할 처리 설정 hash */
+    public String processingConfigHash() {
+
+        return processingConfigService
+                .current(
+                        DocumentParseService.PARSER_POLICY_VERSION,
+                        ChunkService.CHUNKER_POLICY_VERSION
+                )
+                .hash();
+    }
+
+    /** ingest 뒤 봉인됐거나 이미 성공한 Build면 export까지, 같은 요청 재전송은 재개, 발행 번호는 확인 없이 다음 번호 */
+    public BuildResult build(BuildRequest request) {
+
+        return build(
+                request,
+                null
+        );
+    }
+
+    /**
+     * ingest 뒤 봉인됐거나 이미 성공한 Build면 export까지, 같은 요청 재전송은 재개
+     * SUCCEEDED 기록은 Pack의 현재 최대 발행 번호(없으면 0)가 expected일 때만, 다르면 Build를 SEALED로 두고 PublicationConflictException
+     * expected가 null이면 확인 없이 다음 번호, 이미 성공한 Build는 다시 확인하지 않음
+     */
+    public BuildResult build(
+            BuildRequest request,
+            Long expected
+    ) {
+
+        BuildResult ingested = ingest(request);
+
+        if (ingested
+                .status() == BuildStatus.SEALED || ingested
+                        .status() == BuildStatus.SUCCEEDED) {
+            return export(
+                    ingested
+                            .buildId(),
+                    expected
+            );
+        }
+
+        return ingested;
+    }
+
+    /**
+     * 봉인된 Build를 원본 없이 PostgreSQL만 읽어 Pack으로 게시
+     * RUNNING은 그대로 반환, 보류, 실패, 없는 Build는 BuildNotExportableException, 성공한 Build는 게시 객체 확인과 정리 뒤 기존 결과
+     */
+    public BuildResult export(UUID buildId) {
+
+        return export(
+                buildId,
+                null
+        );
+    }
+
+    // 봉인된 Build의 Export, SUCCEEDED 기록은 expected 발행 번호 확인 뒤
+    private BuildResult export(
+            UUID buildId,
+            Long expected
+    ) {
+
+        ExportTarget target = transactionExecutor
+                .write(() -> buildService
+                        .exportTarget(buildId));
+        BuildRow build = target
+                .build();
+
+        switch (build
+                .status()) {
+            case RUNNING -> {
+                return result(buildId);
+            }
+            case NEEDS_REVIEW, FAILED -> throw new BuildNotExportableException(
+                    buildId
+                            .toString(),
+                    "status " + build
+                            .status()
+            );
+            case SUCCEEDED -> {
+                packExportService
+                        .verifyRecorded(build);
+                packExportService
+                        .prune(build);
+
+                return result(buildId);
+            }
+            case SEALED -> {
+                return exportSealed(
+                        target,
+                        expected
+                );
+            }
+        }
+
+        throw new IllegalStateException("unknown status " + build
+                .status());
+    }
+
+    /**
+     * Build 시작 또는 재개, 산출물 없는 문서만 PARSE와 CHUNK, 모두 있으면 봉인
+     * 남은 문서가 있으면 include와 xref 제목 재료인 AsciiDoc 쪽을 먼저 모두 읽고 하나라도 객체가 없으면 어떤 문서도 파싱하지 않고 RUNNING 그대로 반환
+     * 처리 설정 hash가 다르면 DB에 쓰기 전에 ProcessingConfigMismatchException
+     */
+    public BuildResult ingest(BuildRequest request) {
+
+        ProcessingConfig config = processingConfigService
+                .requireMatching(
+                        request
+                                .processingConfigHash(),
+                        DocumentParseService.PARSER_POLICY_VERSION,
+                        ChunkService.CHUNKER_POLICY_VERSION
+                );
+        BuildState state = transactionExecutor
+                .write(() -> buildService
+                        .start(
+                                request,
+                                config
+                        ));
+
+        if (state
+                .build()
+                .status() != BuildStatus.RUNNING) {
+            return result(state);
+        }
+
+        Map<String, SourceDocument> inputs = new HashMap<>();
+
+        if (!state
+                .pending()
+                .isEmpty()) {
+            for (SourceEntry input : parseInputs(request)) {
+                SourceRead read = buildService
+                        .readSource(
+                                state
+                                        .build(),
+                                input
+                        );
+
+                if (read
+                        .outcome() == SourceReadOutcome.MISSING) {
+                    return result(state);
+                }
+
+                if (read
+                        .outcome() == SourceReadOutcome.HASH_MISMATCH) {
+                    return fail(
+                            state,
+                            input
+                    );
+                }
+
+                inputs
+                        .put(
+                                input
+                                        .canonicalUrl(),
+                                read
+                                        .document()
+                        );
+            }
+        }
+
+        for (SourceEntry source : state
+                .pending()) {
+            SourceRead read = buildService
+                    .readSource(
+                            state
+                                    .build(),
+                            source
+                    );
+
+            if (read
+                    .outcome() == SourceReadOutcome.MISSING) {
+                continue;
+            }
+
+            if (read
+                    .outcome() == SourceReadOutcome.HASH_MISMATCH) {
+                return fail(
+                        state,
+                        source
+                );
+            }
+
+            ArtifactRow artifact = artifact(
+                    read,
+                    inputs
+            );
+
+            transactionExecutor
+                    .write(() -> {
+                        buildService
+                                .saveArtifact(
+                                        state
+                                                .build()
+                                                .buildId(),
+                                        source
+                                                .documentId(),
+                                        artifact
+                                );
+
+                        return null;
+                    });
+        }
+
+        transactionExecutor
+                .write(() -> buildService
+                        .seal(state
+                                .build()
+                                .buildId()));
+
+        return result(state);
+    }
+
+    // 파싱 전에 모두 읽어 두는 입력, include 전부와 AsciiDoc으로 변환하는 원본 전부
+    private List<SourceEntry> parseInputs(BuildRequest request) {
+
+        List<SourceEntry> inputs = new ArrayList<>(request
+                .includes());
+
+        for (SourceEntry source : request
+                .sources()) {
+            if (documentParseService
+                    .convertsAsciidoc(
+                            request
+                                    .project(),
+                            source
+                                    .documentType(),
+                            source
+                                    .finalUrl()
+                    )) {
+                inputs
+                        .add(source);
+            }
+        }
+
+        return inputs;
+    }
+
+    // 봉인된 Build의 Pack 채택 또는 작성, 게시, 업로드, SUCCEEDED 기록, 정리
+    private BuildResult exportSealed(
+            ExportTarget target,
+            Long expected
+    ) {
+
+        BuildRow build = target
+                .build();
+
+        if (target
+                .chunkReceipt()
+                .byteCount() > PackWriter.MAX_PACK_BYTES) {
+            throw new BuildNotExportableException(
+                    build
+                            .buildId()
+                            .toString(),
+                    "CHUNK artifacts exceed the pack size limit"
+            );
+        }
+
+        PackRecord adopted = packExportService
+                .findPublished(target);
+        PackRecord pack = adopted != null ? adopted : packExportService
+                .publish(
+                        build,
+                        packExportService
+                                .write(target)
+                );
+
+        packExportService
+                .upload(pack);
+
+        boolean marked = markSucceeded(
+                target,
+                pack,
+                expected
+        );
+        ExportTarget succeeded = transactionExecutor
+                .write(() -> buildService
+                        .exportTarget(build
+                                .buildId()));
+
+        // 바뀌지 않았는데 SUCCEEDED면 같은 Build를 먼저 끝낸 다른 요청의 재생, SEALED면 발행 번호 불일치
+        if (!marked && succeeded
+                .build()
+                .status() != BuildStatus.SUCCEEDED) {
+            throw new PublicationConflictException(
+                    build
+                            .buildId()
+                            .toString(),
+                    expected
+            );
+        }
+
+        packExportService
+                .prune(succeeded
+                        .build());
+
+        return result(build
+                .buildId());
+    }
+
+    // SUCCEEDED 기록, expected가 null이면 같은 번호를 먼저 받은 다른 Build와의 경합으로 보고 한 번 다시
+    private boolean markSucceeded(
+            ExportTarget target,
+            PackRecord pack,
+            Long expected
+    ) {
+
+        try {
+            return markSucceededOnce(
+                    target,
+                    pack,
+                    expected
+            );
+        } catch (DuplicateKeyException exception) {
+            if (expected != null) {
+                throw new PublicationConflictException(
+                        target
+                                .build()
+                                .buildId()
+                                .toString(),
+                        expected
+                );
+            }
+
+            return markSucceededOnce(
+                    target,
+                    pack,
+                    null
+            );
+        }
+    }
+
+    // SUCCEEDED 기록 트랜잭션 하나, 바뀌었으면 true
+    private boolean markSucceededOnce(
+            ExportTarget target,
+            PackRecord pack,
+            Long expected
+    ) {
+
+        return transactionExecutor
+                .write(() -> buildService
+                        .markSucceeded(
+                                target
+                                        .build()
+                                        .buildId(),
+                                pack,
+                                target
+                                        .chunkReceipt()
+                                        .itemCount(),
+                                expected
+                        ));
+    }
+
+    // SUCCEEDED Build의 행, 그 밖 상태는 결과별 예외
+    private BuildRow published(BuildResult result) {
+
+        String buildId = result
+                .buildId()
+                .toString();
+
+        switch (result
+                .status()) {
+            case SUCCEEDED -> {
+                return transactionExecutor
+                        .write(() -> buildService
+                                .exportTarget(result
+                                        .buildId()))
+                        .build();
+            }
+            case RUNNING -> throw new BuildPendingException(buildId);
+            case NEEDS_REVIEW -> throw new BuildNeedsReviewException(
+                    buildId,
+                    result
+                            .holds()
+                            .size()
+            );
+            case FAILED -> throw new BuildFailedException(
+                    buildId,
+                    result
+                            .failureReason()
+            );
+            case SEALED -> throw new IllegalStateException("build " + buildId + " is still sealed after export");
+        }
+
+        throw new IllegalStateException("unknown status " + result
+                .status());
+    }
+
+    // 발행한 Build의 manifest 게시 뒤 receipt, 활성화 작업은 아직 없어 null
+    private ProcessingReceipt receipt(
+            BuildRequest request,
+            BuildRow published
+    ) {
+
+        return new ProcessingReceipt(
+                request
+                        .runInputSnapshotHash(),
+                List
+                        .of(new ProcessingReceipt.ProjectionResult(
+                                new ProcessingReceipt.PackScope(
+                                        request
+                                                .project(),
+                                        request
+                                                .exactVersion(),
+                                        request
+                                                .applicability()
+                                ),
+                                BuildStatus.SUCCEEDED
+                                        .name(),
+                                published
+                                        .buildId(),
+                                published
+                                        .buildId(),
+                                null
+                        )),
+                publicationService
+                        .ensureManifest(published)
+        );
+    }
+
+    // 원본 bytes가 rawSha256과 달라 Build 실패 기록 뒤 현재 상태
+    private BuildResult fail(
+            BuildState state,
+            SourceEntry source
+    ) {
+
+        transactionExecutor
+                .write(() -> {
+                    buildService
+                            .fail(
+                                    state
+                                            .build()
+                                            .buildId(),
+                                    "raw bytes do not match rawSha256 for " + source
+                                            .documentId()
+                            );
+
+                    return null;
+                });
+
+        return result(state);
+    }
+
+    // 원본 하나의 PARSE와 CHUNK 산출물, 보류면 보류 행, CPU 작업이라 트랜잭션 밖
+    private ArtifactRow artifact(
+            SourceRead read,
+            Map<String, SourceDocument> inputs
+    ) {
+
+        try {
+            StructuredDocument structured = documentParseService
+                    .parse(
+                            read
+                                    .document(),
+                            inputs
+                    );
+            PackDocument packDocument = chunkService
+                    .chunk(structured);
+
+            return buildService
+                    .prepareArtifact(
+                            structured,
+                            packDocument
+                    );
+        } catch (DocumentHoldException exception) {
+            return buildService
+                    .prepareHeld(exception
+                            .reason());
+        }
+    }
+
+    // 시작 결과의 현재 Build 상태
+    private BuildResult result(BuildState state) {
+
+        return result(state
+                .build()
+                .buildId());
+    }
+
+    // 현재 Build 상태
+    private BuildResult result(UUID buildId) {
+
+        return transactionExecutor
+                .write(() -> buildService
+                        .result(buildId));
+    }
+}

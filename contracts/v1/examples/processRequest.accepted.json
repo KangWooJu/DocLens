@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "requestId": "11111111-1111-4111-8111-111111111111",
+  "traceId": "11111111-1111-4111-8111-111111111111",
+  "runId": "11111111-1111-4111-8111-111111111111",
+  "discovery": {
+    "objectKey": "discovery/a.json",
+    "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "sizeBytes": 123
+  },
+  "envelopes": [
+    {
+      "objectKey": "manifests/envelope-a.json",
+      "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sizeBytes": 123
+    }
+  ],
+  "supplements": [],
+  "processingConfigHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "modelChecksum": null,
+  "activationMode": "AUTO",
+  "requestedAt": "2026-10-24T00:00:00Z",
+  "snapshotId": "33333333-3333-4333-8333-333333333333",
+  "readyRunId": "44444444-4444-4444-8444-444444444444",
+  "readinessSequence": 1,
+  "protectedObjects": [
+    {
+      "objectRef": {
+        "objectKey": "discovery/a.json",
+        "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sizeBytes": 123
+      },
+      "resourceRef": {
+        "resourceId": "discovery-fixture",
+        "resourceEpoch": 1
+      }
+    },
+    {
+      "objectRef": {
+        "objectKey": "manifests/envelope-a.json",
+        "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sizeBytes": 123
+      },
+      "resourceRef": {
+        "resourceId": "envelope-fixture",
+        "resourceEpoch": 1
+      }
+    }
+  ],
+  "projections": [
+    {
+      "packScope": {
+        "project": "spring-boot",
+        "exactVersion": "4.0.0",
+        "applicability": "EXACT_RELEASE"
+      },
+      "inputScopeKey": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "observationSequence": 1,
+      "expectedPublicationSequence": 0,
+      "activationApprovalId": null
+    }
+  ]
+}

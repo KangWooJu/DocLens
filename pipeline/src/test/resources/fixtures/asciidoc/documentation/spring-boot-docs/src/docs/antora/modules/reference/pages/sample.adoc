@@ -1,0 +1,92 @@
+[[sample]]
+= Sample Guide
+
+This guide is a synthetic page written for DocLens tests.
+
+[[sample.basics]]
+== Basics
+
+DocLens reads converted pages with the same rules as published pages.
+See xref:#sample.code[the code section], xref:nested/deep.adoc#deep.intro[the deep page], xref:how-to:index.adoc#howto.top[How-to Guides] and xref:api:java/index.adoc[].
+
+NOTE: A paragraph note stays a note.
+
+[WARNING]
+====
+A block warning keeps its body.
+====
+
+[[sample.basics.table]]
+=== Table
+
+|===
+| Name | Value
+
+| alpha
+| one
+
+| beta
+| two
+|===
+
+[[sample.basics.table.detail]]
+==== Detail
+
+Use javadoc:org.example.sample.SampleClient[], javadoc:org.example.sample.SampleClient#send(java.lang.String,int)[], javadoc:org.example.sample.SampleBean[format=annotation] and javadoc:{url-sample-javadoc}/org.example.sample.Outer$Inner[Inner Type].
+Set configprop:sample.client.base-url[] or configprop:sample.client.base-url[format=envvar].
+Read the {url-sample-site}[sample site] or open {url-sample-home}.
+
+[[sample.code]]
+== Code
+
+include-code::GreetingService[]
+
+[[sample.code.java-only]]
+=== Java Only
+
+include-code::JavaOnly[]
+
+[[sample.code.tagged]]
+=== Tagged
+
+include-code::Tagged[tag=core]
+
+[[sample.config]]
+== Configuration
+
+[configprops,yaml]
+----
+sample:
+  client:
+    base-url: "https://example.org"
+----
+
+[tabs]
+======
+Maven::
++
+[source,xml]
+----
+<artifactId>sample</artifactId>
+----
+
+Gradle::
++
+[source,gradle]
+----
+implementation("org.example:sample")
+----
+======
+
+[source,text,subs="verbatim,attributes"]
+----
+sample-version={version-spring-boot}
+literal {x} and foo::bar[] stay in code
+----
+
+[[sample.generated]]
+== Generated
+
+include::ROOT:partial$starters/sample-starters.adoc[]
+
+include::reference:partial$snippet.adoc[]

@@ -1,0 +1,68 @@
+spring:
+  application:
+    name: scheduler-server
+  config:
+    # Local values: optional .env at the repository root (git-ignored).
+    # Works from the repository root and from the module directory (bootRun).
+    import:
+      - optional:file:./.env[.properties]
+      - optional:file:../.env[.properties]
+  datasource:
+    hikari:
+      schema: scheduler
+      data-source-properties:
+        # PG05 initial limits: statement 10s, idle in transaction 15s, snapshot 300s (needs PostgreSQL 17)
+        options: "-c statement_timeout=10s -c idle_in_transaction_session_timeout=15s -c transaction_timeout=300s"
+  flyway:
+    schemas: scheduler
+    default-schema: scheduler
+  threads:
+    virtual:
+      enabled: false
+  task:
+    scheduling:
+      # schedule and dispatch ticks; the handoff tick only hands over to handoffExecutor
+      pool:
+        size: 2
+      shutdown:
+        await-termination: true
+        await-termination-period: 20s
+
+server:
+  # 8080 is pipeline when both run from an IDE
+  port: 8081
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+doclens:
+  scheduler:
+    # Bearer token sent to collector-api and pipeline (raw value, receivers keep only its hash)
+    token: ${DOCLENS_SCHEDULER_TOKEN:}
+    collector-url: ${DOCLENS_SCHEDULER_COLLECTOR_URL:http://127.0.0.1:8000}
+    pipeline-url: ${DOCLENS_SCHEDULER_PIPELINE_URL:http://127.0.0.1:8080}
+    # collectionRequest template; each run fills requestId, traceId and requestedAt
+    request-file: ${DOCLENS_SCHEDULER_REQUEST_FILE:./.local/collection-request.json}
+    # Approved processing config hash; pipeline rejects a different one with 409 HASH_MISMATCH
+    processing-config-hash: ${DOCLENS_SCHEDULER_PROCESSING_CONFIG_HASH:}
+    # One active run per schedule key; daily slots and collect-now share it
+    schedule-key: spring-boot-4.1.2
+    collect:
+      # Daily slot (Asia/Seoul), off by default
+      enabled: ${DOCLENS_SCHEDULER_COLLECT_ENABLED:false}
+      time: ${DOCLENS_SCHEDULER_COLLECT_TIME:00:00}
+    connect-timeout: 1s
+    read-timeout: 3s
+    # The processing call is synchronous: build, export and publication finish inside it
+    process-read-timeout: 120s
+    # Claimed row lease, longer than the processing call
+    lease: 180s
+    # Collector job status polling interval
+    status-interval: 30s
+    initial-delay: 0s
+    schedule-delay: 30s
+    dispatch-delay: 5s
+    handoff-delay: 5s

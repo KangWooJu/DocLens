@@ -1,0 +1,268 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  java:
+    name: Java build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Java comment rules
+        run: java tools/JavaCommentCheck.java
+
+      # Golden outputs per processing configuration: lines may be added, never changed or removed.
+      - name: Golden outputs are append-only
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags --depth=1 origin "$GITHUB_BASE_REF"
+          file=pipeline/src/test/resources/golden/processing-outputs.jsonl
+          if git cat-file -e "FETCH_HEAD:$file" 2>/dev/null; then
+            if git diff FETCH_HEAD -- "$file" | grep -E '^-[^-]'; then
+              echo "::error file=$file::existing golden lines must not change or be removed; bump a policy version and add a new line instead"
+              exit 1
+            fi
+          fi
+
+      - run: ./gradlew build --console=plain
+
+  collector:
+    name: Collector checks
+    runs-on: ubuntu-latest
+    # pytest starts PostgreSQL 17, Flyway and S3Mock containers through Testcontainers
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: collector
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.3.3
+
+      - run: uv sync --locked
+
+      - run: uv run ruff check
+
+      - run: uv run pytest
+
+  contracts:
+    name: Contract checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.3.3
+
+      - run: uv run --no-project --python 3.13 --with jsonschema==4.26.0 python tools/check_contracts.py
+
+  e2e:
+    name: Collected build end to end
+    runs-on: ubuntu-latest
+    # The compose stack (collector-api, pipeline, scheduler) runs one scheduler-driven collection: a host harness worker crawls a synthetic git tree on the loopback fixture server, then restarts and resends must converge on one job, one Build, one Pack and one publication; no external host
+    needs: [java, collector, contracts]
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    env:
+      # Host side: harness worker and checks
+      COLLECTOR_DB_URL: postgresql://doclens:doclens@localhost:5432/doclens
+      COLLECTOR_CONTACT: ci@invalid.example
+      DOCLENS_S3_ENDPOINT: http://localhost:9090
+      DOCLENS_S3_BUCKET: doclens
+      DOCLENS_S3_ACCESS_KEY: local
+      DOCLENS_S3_SECRET_KEY: local
+      COLLECTOR_API_URL: http://127.0.0.1:8000
+      PIPELINE_URL: http://127.0.0.1:8080
+      RUN_SLOT: manual:e2e-1
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - uses: astral-sh/setup-uv@v10.3.3
+
+      # compose mounts these jars, so they exist before the stack starts
+      - run: ./gradlew :pipeline:bootJar :scheduler-server:bootJar --console=plain
+
+      - name: Local .env with throwaway caller tokens
+        run: |
+          read -r scheduler scheduler_hash operator operator_hash < <(python3 -c "import secrets,hashlib;t=[secrets.token_urlsafe(32) for _ in range(2)];print(*(x for v in t for x in (v,hashlib.sha256(v.encode()).hexdigest())))")
+          echo "::add-mask::$scheduler"
+          echo "::add-mask::$operator"
+          printf '%s' "$scheduler" > "$RUNNER_TEMP/scheduler-token"
+          printf '%s' "$operator" > "$RUNNER_TEMP/operator-token"
+          cat > .env <<EOF
+          COLLECTOR_CONTACT=$COLLECTOR_CONTACT
+          DOCLENS_S3_BUCKET=$DOCLENS_S3_BUCKET
+          DOCLENS_S3_ACCESS_KEY=$DOCLENS_S3_ACCESS_KEY
+          DOCLENS_S3_SECRET_KEY=$DOCLENS_S3_SECRET_KEY
+          DOCLENS_CALLER_TOKENS=scheduler:$scheduler_hash,operator:$operator_hash
+          DOCLENS_SCHEDULER_TOKEN=$scheduler
+          DOCLENS_SCHEDULER_DISPATCH_DELAY=1s
+          DOCLENS_SCHEDULER_HANDOFF_DELAY=1s
+          DOCLENS_SCHEDULER_STATUS_INTERVAL=1s
+          DOCLENS_SCHEDULER_PROCESS_READ_TIMEOUT=30s
+          DOCLENS_SCHEDULER_LEASE=40s
+          EOF
+
+      - run: docker compose up -d --wait postgres s3mock
+
+      - run: docker compose run --rm collector-migrate
+
+      - name: Approve the synthetic registry and write the request template
+        working-directory: collector
+        run: |
+          uv sync --locked
+          mkdir -p ../.local
+          uv run python -m tests.support.e2e_stack prepare > ../.local/collection-request.json
+
+      - name: Start collector-api and pipeline, approve the processing config
+        run: |
+          docker compose --profile app up -d --wait collector-api pipeline
+          hash=$(docker compose logs pipeline | grep -o 'processing config sha256:[0-9a-f]*' | cut -d' ' -f3)
+          echo "DOCLENS_SCHEDULER_PROCESSING_CONFIG_HASH=$hash" >> .env
+
+      - run: docker compose --profile app up -d --wait scheduler
+
+      - name: Collect now, then kill the scheduler once the job is accepted
+        run: |
+          sql() { docker compose exec -T postgres psql -U doclens -d doclens -tAc "$1"; }
+          docker compose --profile app run --rm -T scheduler --spring.profiles.active=command collect-now e2e-1 | tee "$RUNNER_TEMP/collect-now.log"
+          grep -q '^{"result":"CREATED"' "$RUNNER_TEMP/collect-now.log"
+          for _ in $(seq 120); do
+            [ "$(sql "select delivery_state from scheduler.runs where slot_key = '$RUN_SLOT'")" = SENT ] && break
+            sleep 1
+          done
+          [ "$(sql "select delivery_state from scheduler.runs where slot_key = '$RUN_SLOT'")" = SENT ]
+          docker compose kill scheduler
+
+      - name: Start the harness worker and a new scheduler that picks up the same run
+        working-directory: collector
+        run: |
+          nohup uv run python -m tests.support.e2e_stack work > "$RUNNER_TEMP/worker.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/worker.pid"
+          docker compose --profile app up -d --wait scheduler
+
+      - name: Wait for the run, then check one job, one Build, one Pack and one publication
+        run: |
+          sql() { docker compose exec -T postgres psql -U doclens -d doclens -tAc "$1"; }
+          for _ in $(seq 600); do
+            state=$(sql "select state from scheduler.runs where slot_key = '$RUN_SLOT'")
+            [ "$state" = DONE ] || [ "$state" = FAILED ] && break
+            sleep 1
+          done
+          [ "$state" = DONE ]
+          kill -TERM "$(cat "$RUNNER_TEMP/worker.pid")"
+          scheduler="Authorization: Bearer $(cat "$RUNNER_TEMP/scheduler-token")"
+          operator="Authorization: Bearer $(cat "$RUNNER_TEMP/operator-token")"
+          out="$RUNNER_TEMP/contracts"
+          mkdir -p "$out"
+          [ "$(sql "select count(*) || ' ' || count(*) filter (where state = 'DONE') from scheduler.runs")" = "1 1" ]
+          [ "$(sql "select count(*) from collector.jobs")" = 1 ]
+          [ "$(sql "select count(*) || ' ' || string_agg(status || ' ' || publication_sequence, ',') from pipeline.builds")" = "1 SUCCEEDED 1" ]
+          job=$(sql "select collector_job_id from scheduler.runs")
+          sql "select collection_request from scheduler.runs" > "$out/collection-request.json"
+          sql "select result from scheduler.runs" > "$out/receipt.json"
+          curl -sf -H "$scheduler" -H 'Content-Type: application/json' --data-binary @"$out/collection-request.json" "$COLLECTOR_API_URL/internal/v1/collection-jobs" > "$out/accept.json"
+          curl -sf -H "$scheduler" "$COLLECTOR_API_URL/internal/v1/collection-jobs/$job" > "$out/status.json"
+          curl -sf -H "$scheduler" "$COLLECTOR_API_URL/internal/v1/collection-jobs/$job/ready-run" > "$out/ready-run.json"
+          curl -sf -H "$operator" "$PIPELINE_URL/internal/v1/publications/latest?project=spring-boot&exactVersion=4.1.2" > "$out/manifest.json"
+          [ "$(jq -r '"\(.jobId) \(.duplicate)"' "$out/accept.json")" = "$job true" ]
+          [ "$(jq .publicationSequence "$out/manifest.json")" = 1 ]
+          [ "$(jq -r .buildId "$out/manifest.json")" = "$(jq -r '.projectionResults[0].buildId' "$out/receipt.json")" ]
+          [ "$(jq -r .resultObjectRef.objectKey "$out/receipt.json")" = packs/spring-boot-4.1.2/publications/1.json ]
+          curl -sf -o /dev/null -I "$DOCLENS_S3_ENDPOINT/$DOCLENS_S3_BUCKET/$(jq -r .objectKey "$out/manifest.json")"
+          curl -sf -o /dev/null -I "$DOCLENS_S3_ENDPOINT/$DOCLENS_S3_BUCKET/packs/spring-boot-4.1.2/publications/1.json"
+          uv run --no-project --python 3.13 --with jsonschema==4.26.0 python - "$out" <<'EOF'
+          import json, sys
+          from pathlib import Path
+          sys.path.insert(0, "tools")
+          from check_contracts import load_schemas, validator_for
+          schemas = load_schemas()
+          checks = {
+              "collection-request.json": ("collection.schema.json", "collectionRequest"),
+              "accept.json": ("collection.schema.json", "accept"),
+              "status.json": ("collection.schema.json", "status"),
+              "ready-run.json": ("collection.schema.json", "readyRun"),
+              "receipt.json": ("collection.schema.json", "processingRunResultReceipt"),
+              "manifest.json": ("publication-manifest.schema.json", None),
+          }
+          for name, (schema, definition) in checks.items():
+              errors = list(validator_for(schemas[schema], definition).iter_errors(json.loads((Path(sys.argv[1]) / name).read_text())))
+              if errors:
+                  raise SystemExit(f"{name}: {errors[0].message}")
+          print(f"contracts ok: {len(checks)} documents")
+          EOF
+
+      - name: Same collect-now again creates nothing
+        run: |
+          sql() { docker compose exec -T postgres psql -U doclens -d doclens -tAc "$1"; }
+          docker compose --profile app run --rm -T scheduler --spring.profiles.active=command collect-now e2e-1 | tee "$RUNNER_TEMP/collect-now.log"
+          grep -q '^{"result":"DUPLICATE_SLOT"' "$RUNNER_TEMP/collect-now.log"
+          [ "$(sql "select (select count(*) from scheduler.runs) || ' ' || (select count(*) from collector.jobs) || ' ' || (select count(*) from pipeline.builds)")" = "1 1 1" ]
+
+      - name: Redeploy with the volumes kept creates nothing
+        run: |
+          sql() { docker compose exec -T postgres psql -U doclens -d doclens -tAc "$1"; }
+          docker compose --profile app down
+          docker compose --profile app up -d --wait postgres s3mock collector-api pipeline scheduler
+          sleep 60
+          [ "$(sql "select (select count(*) from scheduler.runs where state = 'DONE') || ' ' || (select count(*) from collector.jobs) || ' ' || (select count(*) from pipeline.builds where publication_sequence = 1)")" = "1 1 1" ]
+
+      - name: Resent processing request and resent collection request converge on the same Build
+        run: |
+          sql() { docker compose exec -T postgres psql -U doclens -d doclens -tAc "$1"; }
+          done_again() {
+            for _ in $(seq 300); do
+              state=$(sql "select state from scheduler.runs")
+              [ "$state" = DONE ] || [ "$state" = FAILED ] && break
+              sleep 1
+            done
+            [ "$state" = DONE ]
+          }
+          converged() {
+            [ "$(sql "select result -> 'projectionResults' -> 0 ->> 'buildId' from scheduler.runs")" = "$build" ]
+            [ "$(sql "select (select count(*) from collector.jobs) || ' ' || (select count(*) || ' ' || max(publication_sequence) from pipeline.builds)")" = "1 1 1" ]
+            [ "$(curl -sf "$DOCLENS_S3_ENDPOINT/$DOCLENS_S3_BUCKET?list-type=2&prefix=packs/spring-boot-4.1.2/publications/" | grep -o '<Key>' | wc -l)" -eq 1 ]
+          }
+          build=$(sql "select result -> 'projectionResults' -> 0 ->> 'buildId' from scheduler.runs")
+          # Processing response lost: the fixed body goes to the pipeline again
+          sql "update scheduler.runs set state = 'PROCESSING', delivery_state = 'PENDING', result = null, next_attempt_at = now(), lease_until = null"
+          done_again
+          converged
+          # Collection response lost: the stored request goes to collector-api again and replays the same job
+          sql "update scheduler.runs set state = 'COLLECTING', delivery_state = 'PENDING', ready_run_ref = null, process_request = null, result = null, next_attempt_at = now(), lease_until = null"
+          done_again
+          converged
+
+      - name: Stack logs and runs on failure
+        if: failure()
+        run: |
+          docker compose --profile app logs --no-color --timestamps || true
+          cat "$RUNNER_TEMP/worker.log" || true
+          docker compose exec -T postgres psql -U doclens -d doclens -c "select * from scheduler.runs" || true

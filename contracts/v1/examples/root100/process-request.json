@@ -1,0 +1,96 @@
+{
+  "activationMode": "AUTO",
+  "discovery": {
+    "contentHash": "sha256:ae5a2cbcac7018895b4831828c7c012132ec0da0e852ccfc4bfe01d028cac291",
+    "objectKey": "discovery/fixture-root100/discovery.json",
+    "sizeBytes": 1372
+  },
+  "envelopes": [
+    {
+      "contentHash": "sha256:830efda4828b57cd528b4ee6b6a741c6d8b8fdc833bd2cf13c4314f378462d69",
+      "objectKey": "manifests/fixture-root100/envelope.json",
+      "sizeBytes": 1412
+    }
+  ],
+  "modelChecksum": null,
+  "processingConfigHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "projections": [
+    {
+      "expectedPublicationSequence": 0,
+      "inputScopeKey": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "observationSequence": 1,
+      "packScope": {
+        "applicability": "EXACT_RELEASE",
+        "exactVersion": "4.0.0",
+        "project": "spring-boot"
+      },
+      "activationApprovalId": null
+    }
+  ],
+  "protectedObjects": [
+    {
+      "objectRef": {
+        "contentHash": "sha256:ae5a2cbcac7018895b4831828c7c012132ec0da0e852ccfc4bfe01d028cac291",
+        "objectKey": "discovery/fixture-root100/discovery.json",
+        "sizeBytes": 1372
+      },
+      "resourceRef": {
+        "resourceEpoch": 1,
+        "resourceId": "object:sha256:ae5a2cbcac7018895b4831828c7c012132ec0da0e852ccfc4bfe01d028cac291"
+      }
+    },
+    {
+      "objectRef": {
+        "contentHash": "sha256:81f7dc1a38a189c824354cd30f5673094f8262af9cf85741bd80969d855d09a4",
+        "objectKey": "manifests/fixture-root100/targets.jsonl",
+        "sizeBytes": 34300
+      },
+      "resourceRef": {
+        "resourceEpoch": 1,
+        "resourceId": "object:sha256:81f7dc1a38a189c824354cd30f5673094f8262af9cf85741bd80969d855d09a4"
+      }
+    },
+    {
+      "objectRef": {
+        "contentHash": "sha256:fad35606aac8c7fe5a8e8f8a493e8eb9d9b30489382e4ea9c6d59048f44faf11",
+        "objectKey": "manifests/fixture-root100/outcomes.jsonl",
+        "sizeBytes": 133723
+      },
+      "resourceRef": {
+        "resourceEpoch": 1,
+        "resourceId": "object:sha256:fad35606aac8c7fe5a8e8f8a493e8eb9d9b30489382e4ea9c6d59048f44faf11"
+      }
+    },
+    {
+      "objectRef": {
+        "contentHash": "sha256:830efda4828b57cd528b4ee6b6a741c6d8b8fdc833bd2cf13c4314f378462d69",
+        "objectKey": "manifests/fixture-root100/envelope.json",
+        "sizeBytes": 1412
+      },
+      "resourceRef": {
+        "resourceEpoch": 1,
+        "resourceId": "object:sha256:830efda4828b57cd528b4ee6b6a741c6d8b8fdc833bd2cf13c4314f378462d69"
+      }
+    },
+    {
+      "objectRef": {
+        "contentHash": "sha256:8662b06420b4263397e6b50eda568f6178ee7d6366a49007eee7a149975ed714",
+        "objectKey": "raw/fixture-root100/fixture.html",
+        "sizeBytes": 125
+      },
+      "resourceRef": {
+        "resourceEpoch": 1,
+        "resourceId": "object:sha256:8662b06420b4263397e6b50eda568f6178ee7d6366a49007eee7a149975ed714"
+      }
+    }
+  ],
+  "readinessSequence": 1,
+  "readyRunId": "44444444-4444-4444-8444-444444444444",
+  "requestId": "11111111-1111-4111-8111-111111111111",
+  "requestedAt": "2026-10-24T00:00:00Z",
+  "runId": "11111111-1111-4111-8111-111111111111",
+  "schemaVersion": 1,
+  "snapshotId": "33333333-3333-4333-8333-333333333333",
+  "supplements": [],
+  "traceId": "11111111-1111-4111-8111-111111111111"
+}

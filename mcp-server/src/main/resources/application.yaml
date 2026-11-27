@@ -1,0 +1,11 @@
+spring:
+  application:
+    name: mcp-server
+  main:
+    # STDIO MCP process: no web server, and stdout belongs to the protocol.
+    web-application-type: none
+    banner-mode: off
+  config:
+    import:
+      - optional:file:./.env[.properties]
+      - optional:file:../.env[.properties]

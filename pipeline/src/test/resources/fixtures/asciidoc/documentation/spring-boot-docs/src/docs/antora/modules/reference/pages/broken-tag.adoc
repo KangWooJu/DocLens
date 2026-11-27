@@ -1,0 +1,7 @@
+[[broken]]
+= Broken Tag
+
+[[sample.code.tagged]]
+== Tagged
+
+include-code::Tagged[tag=absent]

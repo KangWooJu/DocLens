@@ -1,0 +1,17 @@
+package io.github.kangwooju.doclens.pipeline.parse.type;
+
+/** 문서를 새 Build에 넣지 않고 검토로 넘기는 이유 */
+public enum HoldReason {
+    INVALID_UNICODE,
+    SELECTOR_UNVERIFIED,
+    ROOT_AMBIGUOUS,
+    BODY_EMPTY,
+    TITLE_MISSING,
+    VERSION_MARKER_MISSING,
+    VERSION_MARKER_CONFLICT,
+    TAB_DEFAULT_UNRESOLVED,
+    TAB_STRUCTURE_UNSUPPORTED,
+    BLOCK_NESTING_UNSUPPORTED,
+    CODE_OVER_HARD_LIMIT,
+    ASCIIDOC_UNRESOLVED
+}

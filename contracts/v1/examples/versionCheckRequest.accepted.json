@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "requestKind": "VERSION_CHECK",
+  "requestId": "11111111-1111-4111-8111-111111111111",
+  "traceId": "11111111-1111-4111-8111-111111111111",
+  "sourceRegistryHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "targets": [
+    {
+      "catalogKind": "PROJECT_CATALOG",
+      "catalogSourceId": "spring-project-catalog-v1",
+      "project": null
+    },
+    {
+      "catalogKind": "RELEASE_CATALOG",
+      "catalogSourceId": "spring-boot-release-catalog-v1",
+      "project": "spring-boot"
+    }
+  ],
+  "requestedAt": "2026-10-24T00:00:00Z"
+}

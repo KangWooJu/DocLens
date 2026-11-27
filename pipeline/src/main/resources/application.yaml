@@ -1,0 +1,44 @@
+spring:
+  application:
+    name: pipeline
+  autoconfigure:
+    # Callers authenticate with static bearer tokens only, so no generated in-memory user
+    exclude: org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration
+  config:
+    # Local values: optional .env at the repository root (git-ignored).
+    # Works from the repository root and from the module directory (bootRun).
+    import:
+      - optional:file:./.env[.properties]
+      - optional:file:../.env[.properties]
+  datasource:
+    hikari:
+      schema: pipeline
+      data-source-properties:
+        # PG05 initial limits: statement 10s, idle in transaction 15s, snapshot 300s (needs PostgreSQL 17)
+        options: "-c statement_timeout=10s -c idle_in_transaction_session_timeout=15s -c transaction_timeout=300s"
+  flyway:
+    schemas: pipeline
+    default-schema: pipeline
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+doclens:
+  security:
+    # Internal API callers as <caller>:<sha256 hex of the token>[,...]; empty rejects every internal call
+    caller-tokens: ${DOCLENS_CALLER_TOKENS:}
+  pipeline:
+    # Local object root: raw/ sources and packs/ output in local mode, the pack working directory in s3 mode
+    object-root: ${DOCLENS_OBJECT_ROOT:./data}
+    # Object store for raw/ reads and packs/ uploads: local (object-root) or s3
+    object-store: ${DOCLENS_OBJECT_STORE:local}
+    # S3 compatible store, used only when object-store is s3 (defaults match the local S3Mock)
+    s3:
+      endpoint: ${DOCLENS_S3_ENDPOINT:http://localhost:9090}
+      bucket: ${DOCLENS_S3_BUCKET:doclens}
+      region: ${DOCLENS_S3_REGION:us-east-1}
+      access-key: ${DOCLENS_S3_ACCESS_KEY:local}
+      secret-key: ${DOCLENS_S3_SECRET_KEY:local}

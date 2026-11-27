@@ -1,0 +1,9 @@
+[[broken]]
+= Broken Unsafe
+
+[[broken.body]]
+== Body
+
+include::/etc/hosts[]
+
+include::https://example.com/x[]

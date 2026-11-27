@@ -1,0 +1,1216 @@
+package io.github.kangwooju.doclens.pipeline.collected.service;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.HexFormat;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import org.springframework.stereotype.Service;
+
+import io.github.kangwooju.doclens.core.json.CanonicalJson;
+import io.github.kangwooju.doclens.core.pack.type.DocumentType;
+import io.github.kangwooju.doclens.pipeline.collected.dto.ObjectRef;
+import io.github.kangwooju.doclens.pipeline.collected.dto.ProcessRequest;
+import io.github.kangwooju.doclens.pipeline.collected.exception.CollectedRunIncompleteException;
+import io.github.kangwooju.doclens.pipeline.collected.exception.CollectedRunInvalidException;
+import io.github.kangwooju.doclens.pipeline.collected.exception.ProcessRequestInvalidException;
+import io.github.kangwooju.doclens.pipeline.global.id.IdHash;
+import io.github.kangwooju.doclens.pipeline.global.store.ObjectStore;
+import io.github.kangwooju.doclens.pipeline.pack.dto.BuildRequest;
+import io.github.kangwooju.doclens.pipeline.pack.dto.SourceEntry;
+import lombok.RequiredArgsConstructor;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.IntNode;
+import tools.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.node.StringNode;
+
+/**
+ * collector readyRun 하나를 pipeline Build 요청으로, 참조 manifest의 hash, 크기, 집합, 개수를 모두 검증
+ * commit 고정 원본은 같은 run에 봉인된 gradle.properties bytes로 버전과 commit을 다시 판정
+ */
+@Service
+@RequiredArgsConstructor
+public class CollectedRunService {
+
+    /** run 입력 snapshot hash의 첫 필드 */
+    public static final String INPUT_SNAPSHOT_DOMAIN = "input-snapshot-v1";
+
+    // 원본 없이 실패한 문서의 raw 자리 값
+    private static final String NO_RAW = "none";
+
+    private static final Comparator<String> CODE_POINT_ORDER = CanonicalJson::compareCodePoints;
+
+    // commit 고정 git blob 원본의 input sourceType
+    private static final String GIT_BLOB = "git-blob";
+
+    // commit 고정 원본이 아는 유일한 버전 규칙
+    private static final String GRADLE_PROPERTIES_RULE = "gradle-properties-version-v1";
+
+    // commit 고정 원본의 버전 근거 방법
+    private static final String PINNED_METHOD = "VERSION_PINNED_URL";
+
+    // 버전 근거 파일의 저장소 경로
+    private static final String GRADLE_PROPERTIES = "gradle.properties";
+
+    // commit 고정 raw URL, commit과 저장소 경로
+    private static final Pattern PINNED_URL = Pattern
+            .compile("https://raw\\.githubusercontent\\.com/[^/]+/[^/]+/([0-9a-f]{40})/(.+)");
+
+    // gradle.properties 첫 version 줄의 값
+    private static final Pattern GRADLE_VERSION = Pattern
+            .compile(
+                    "^version=(\\S+)$",
+                    Pattern.MULTILINE
+            );
+
+    private final ObjectStore objectStore;
+    private final JsonMapper jsonMapper;
+
+    /**
+     * 처리 요청 본문의 형식과 지원 범위 확인, 어긋나면 ProcessRequestInvalidException
+     * 지금은 AUTO 하나의 projection과 정수 기대 발행 번호만 받음, 여러 projection과 다른 활성화 방식은 활성화 단계와 함께
+     */
+    public ProcessRequest processRequest(String body) {
+
+        JsonNode request;
+
+        try {
+            request = jsonMapper
+                    .readTree(body);
+        } catch (JacksonException exception) {
+            throw new ProcessRequestInvalidException(
+                    "body",
+                    "not JSON: " + exception
+                            .getOriginalMessage()
+            );
+        }
+
+        if (request == null || !request
+                .isObject()) {
+            throw new ProcessRequestInvalidException(
+                    "body",
+                    "a JSON object is required"
+            );
+        }
+
+        requireValue(
+                request,
+                "schemaVersion",
+                IntNode
+                        .valueOf(1)
+        );
+        requireValue(
+                request,
+                "activationMode",
+                StringNode
+                        .valueOf("AUTO")
+        );
+
+        JsonNode projections = request
+                .get("projections");
+
+        if (projections == null || !projections
+                .isArray() || projections
+                        .size() != 1 || !projections
+                                .get(0)
+                                .isObject()) {
+            throw new ProcessRequestInvalidException(
+                    "projections",
+                    "exactly one projection object is required"
+            );
+        }
+
+        JsonNode expected = projections
+                .get(0)
+                .get("expectedPublicationSequence");
+
+        if (expected == null || !expected
+                .isIntegralNumber() || !expected
+                        .canConvertToLong() || expected
+                                .longValue() < 0) {
+            throw new ProcessRequestInvalidException(
+                    "expectedPublicationSequence",
+                    "a non-negative integer is required"
+            );
+        }
+
+        return new ProcessRequest(
+                requiredText(
+                        request,
+                        "readyRunId"
+                ),
+                requiredText(
+                        request,
+                        "processingConfigHash"
+                ),
+                expected
+                        .longValue(),
+                request
+        );
+    }
+
+    /** projection마다 BuildRequest 하나, 필수 문서 실패가 있으면 CollectedRunIncompleteException */
+    public List<BuildRequest> requests(
+            ObjectRef readyRun,
+            String processingConfigHash
+    ) {
+
+        return requests(
+                json(readyRun),
+                processingConfigHash
+        );
+    }
+
+    /**
+     * 이미 읽은 readyRun 또는 같은 필드를 담은 처리 요청 본문으로 projection마다 BuildRequest 하나
+     * 처리 요청이 projection에 더한 기대 발행 번호와 승인 ID는 discovery와 비교하기 전에 뗌
+     */
+    public List<BuildRequest> requests(
+            JsonNode readyRun,
+            String processingConfigHash
+    ) {
+
+        JsonNode ready = withoutProcessFields(readyRun);
+        ObjectRef discoveryRef = ref(
+                ready,
+                "discovery"
+        );
+        JsonNode discovery = json(discoveryRef);
+
+        requireSame(
+                ready,
+                discovery,
+                "runId"
+        );
+        requireSame(
+                ready,
+                discovery,
+                "snapshotId"
+        );
+        requireSame(
+                ready,
+                discovery,
+                "projections"
+        );
+
+        Map<String, JsonNode> batches = batches(discovery);
+        Map<String, String> envelopeHashes = new TreeMap<>(CODE_POINT_ORDER);
+        List<JsonNode> outcomes = new ArrayList<>();
+
+        for (JsonNode envelopeNode : array(
+                ready,
+                "envelopes"
+        )) {
+            ObjectRef envelopeRef = ref(envelopeNode);
+            JsonNode envelope = json(envelopeRef);
+            String batchId = text(
+                    envelope,
+                    "batchId"
+            );
+
+            if (envelopeHashes
+                    .put(
+                            batchId,
+                            envelopeRef
+                                    .contentHash()
+                    ) != null) {
+                throw new CollectedRunInvalidException(
+                        "envelopes",
+                        "duplicate batch " + batchId
+                );
+            }
+
+            outcomes
+                    .addAll(batchOutcomes(
+                            ready,
+                            discoveryRef,
+                            envelope,
+                            batches
+                                    .get(batchId)
+                    ));
+        }
+
+        if (!envelopeHashes
+                .keySet()
+                .equals(batches
+                        .keySet())) {
+            throw new CollectedRunInvalidException(
+                    "envelopes",
+                    "batches " + envelopeHashes
+                            .keySet() + " differ from discovery batches " + batches
+                                    .keySet()
+            );
+        }
+
+        requireRunTargets(
+                discovery,
+                outcomes
+        );
+        outcomes
+                .sort(Comparator
+                        .comparing(
+                                outcome -> text(
+                                        outcome,
+                                        "documentId"
+                                ),
+                                CODE_POINT_ORDER
+                        ));
+
+        String snapshotHash = inputSnapshotHash(
+                discoveryRef,
+                envelopeHashes,
+                outcomes
+        );
+        List<BuildRequest> requests = new ArrayList<>();
+
+        for (JsonNode projection : array(
+                ready,
+                "projections"
+        )) {
+            requests
+                    .add(request(
+                            projection,
+                            outcomes,
+                            optionalText(
+                                    discovery,
+                                    "officialRevision"
+                            ),
+                            snapshotHash,
+                            processingConfigHash
+                    ));
+        }
+
+        return requests;
+    }
+
+    // 처리 요청 필드를 뗀 readyRun 사본, 원본 노드는 바꾸지 않음
+    private static JsonNode withoutProcessFields(JsonNode readyRun) {
+
+        if (readyRun == null || !readyRun
+                .isObject()) {
+            throw new CollectedRunInvalidException(
+                    "readyRun",
+                    "object is required"
+            );
+        }
+
+        ObjectNode ready = (ObjectNode) readyRun
+                .deepCopy();
+
+        for (JsonNode projection : array(
+                ready,
+                "projections"
+        )) {
+            if (projection instanceof ObjectNode fields) {
+                fields
+                        .remove("expectedPublicationSequence");
+                fields
+                        .remove("activationApprovalId");
+            }
+        }
+
+        return ready;
+    }
+
+    // 처리 요청 필드가 정해진 값이어야 통과
+    private static void requireValue(
+            JsonNode request,
+            String field,
+            JsonNode expected
+    ) {
+
+        if (!expected
+                .equals(request
+                        .get(field))) {
+            throw new ProcessRequestInvalidException(
+                    field,
+                    "must be " + expected
+            );
+        }
+    }
+
+    // 처리 요청의 비지 않은 문자열 필드
+    private static String requiredText(
+            JsonNode request,
+            String field
+    ) {
+
+        JsonNode value = request
+                .get(field);
+
+        if (value == null || !value
+                .isString() || value
+                        .stringValue()
+                        .isEmpty()) {
+            throw new ProcessRequestInvalidException(
+                    field,
+                    "a non-empty string is required"
+            );
+        }
+
+        return value
+                .stringValue();
+    }
+
+    // envelope 하나의 outcome 줄, batch targetList와 집합, 개수, run 식별자 대조
+    private List<JsonNode> batchOutcomes(
+            JsonNode ready,
+            ObjectRef discoveryRef,
+            JsonNode envelope,
+            JsonNode batch
+    ) {
+
+        String batchId = text(
+                envelope,
+                "batchId"
+        );
+
+        if (batch == null) {
+            throw new CollectedRunInvalidException(
+                    "envelope",
+                    "batch " + batchId + " is not in discovery"
+            );
+        }
+
+        requireSame(
+                ready,
+                envelope,
+                "runId"
+        );
+        requireSame(
+                ready,
+                envelope,
+                "snapshotId"
+        );
+
+        if (!ref(
+                envelope,
+                "discovery"
+        )
+                .equals(discoveryRef)) {
+            throw new CollectedRunInvalidException(
+                    "envelope",
+                    "batch " + batchId + " refers to another discovery"
+            );
+        }
+
+        ObjectRef targetsRef = ref(
+                envelope,
+                "targetList"
+        );
+
+        if (!targetsRef
+                .equals(ref(
+                        batch,
+                        "targetList"
+                ))) {
+            throw new CollectedRunInvalidException(
+                    "envelope",
+                    "batch " + batchId + " targetList differs from discovery"
+            );
+        }
+
+        List<JsonNode> targets = lines(targetsRef);
+        List<JsonNode> outcomes = lines(ref(
+                envelope,
+                "jsonl"
+        ));
+        long targetCount = number(
+                envelope,
+                "targetCount"
+        );
+        long successCount = number(
+                envelope,
+                "successCount"
+        );
+        long successLines = outcomes
+                .stream()
+                .filter(CollectedRunService::succeeded)
+                .count();
+
+        if (targetCount != successCount + number(
+                envelope,
+                "failureCount"
+        ) || targetCount != outcomes
+                .size() || targetCount != targets
+                        .size() || targetCount != number(
+                                batch,
+                                "targetCount"
+                        ) || successCount != successLines) {
+            throw new CollectedRunInvalidException(
+                    "envelope",
+                    "batch " + batchId + " counts do not match its lines"
+            );
+        }
+
+        Set<String> outcomeIds = documentIds(outcomes);
+
+        if (!documentIds(targets)
+                .equals(outcomeIds) || outcomeIds
+                        .size() != outcomes
+                                .size()) {
+            throw new CollectedRunInvalidException(
+                    "envelope",
+                    "batch " + batchId + " outcomes differ from its targets"
+            );
+        }
+
+        for (JsonNode outcome : outcomes) {
+            requireSame(
+                    ready,
+                    outcome,
+                    "runId"
+            );
+            requireSame(
+                    ready,
+                    outcome,
+                    "snapshotId"
+            );
+            requireSame(
+                    envelope,
+                    outcome,
+                    "batchId"
+            );
+        }
+
+        return outcomes;
+    }
+
+    // 회차 targetList가 batch 대상의 합집합이고 documentId 중복 없음
+    private void requireRunTargets(
+            JsonNode discovery,
+            List<JsonNode> outcomes
+    ) {
+
+        List<JsonNode> targets = lines(ref(
+                discovery,
+                "targetList"
+        ));
+        Set<String> targetIds = documentIds(targets);
+
+        if (targetIds
+                .size() != targets
+                        .size() || targets
+                                .size() != outcomes
+                                        .size() || number(
+                                                discovery,
+                                                "targetCount"
+                                        ) != targets
+                                                .size() || !targetIds
+                                                        .equals(documentIds(outcomes))) {
+            throw new CollectedRunInvalidException(
+                    "discovery",
+                    "run targetList is not the union of batch targets"
+            );
+        }
+    }
+
+    // projection 하나의 Build 요청, 필수 실패가 있으면 CollectedRunIncompleteException, 예시 원본은 include로
+    private BuildRequest request(
+            JsonNode projection,
+            List<JsonNode> outcomes,
+            String officialRevision,
+            String snapshotHash,
+            String processingConfigHash
+    ) {
+
+        JsonNode scope = object(
+                projection,
+                "packScope"
+        );
+        List<String> failedIds = new ArrayList<>();
+        List<String> errorCodes = new ArrayList<>();
+        List<SourceEntry> sources = new ArrayList<>();
+        List<SourceEntry> includes = new ArrayList<>();
+        List<JsonNode> pinned = new ArrayList<>();
+
+        for (JsonNode outcome : outcomes) {
+            JsonNode input = object(
+                    outcome,
+                    "input"
+            );
+
+            if (!sameScope(
+                    scope,
+                    input
+            )) {
+                continue;
+            }
+
+            if (succeeded(outcome)) {
+                SourceEntry source = source(outcome);
+
+                if (source
+                        .documentType() == DocumentType.EXAMPLE) {
+                    includes
+                            .add(source);
+                } else {
+                    sources
+                            .add(source);
+                }
+
+                if (GIT_BLOB
+                        .equals(text(
+                                input,
+                                "sourceType"
+                        ))) {
+                    pinned
+                            .add(outcome);
+                }
+            } else if (flag(
+                    input,
+                    "required"
+            )) {
+                failedIds
+                        .add(text(
+                                outcome,
+                                "documentId"
+                        ));
+                errorCodes
+                        .add(text(
+                                outcome,
+                                "errorCode"
+                        ));
+            }
+        }
+
+        if (!failedIds
+                .isEmpty()) {
+            throw new CollectedRunIncompleteException(
+                    failedIds,
+                    errorCodes
+            );
+        }
+
+        if (!pinned
+                .isEmpty()) {
+            requireGradleVersion(
+                    pinned,
+                    officialRevision,
+                    text(
+                            scope,
+                            "exactVersion"
+                    )
+            );
+        }
+
+        return new BuildRequest(
+                text(
+                        scope,
+                        "project"
+                ),
+                text(
+                        scope,
+                        "exactVersion"
+                ),
+                text(
+                        scope,
+                        "applicability"
+                ),
+                text(
+                        projection,
+                        "inputScopeKey"
+                ),
+                snapshotHash,
+                processingConfigHash,
+                null,
+                sources,
+                includes
+        );
+    }
+
+    // commit 고정 원본의 버전 근거, 봉인된 gradle.properties bytes의 version과 모든 commit 일치
+    private void requireGradleVersion(
+            List<JsonNode> pinned,
+            String officialRevision,
+            String exactVersion
+    ) {
+
+        List<JsonNode> properties = new ArrayList<>();
+
+        for (JsonNode outcome : pinned) {
+            JsonNode evidence = object(
+                    outcome,
+                    "versionEvidence"
+            );
+            String rule = text(
+                    evidence,
+                    "selectorRuleId"
+            );
+
+            if (!GRADLE_PROPERTIES_RULE
+                    .equals(rule)) {
+                throw new CollectedRunInvalidException(
+                        "selectorRuleId",
+                        "unknown version rule " + rule
+                );
+            }
+
+            if (!PINNED_METHOD
+                    .equals(text(
+                            evidence,
+                            "method"
+                    ))) {
+                throw new CollectedRunInvalidException(
+                        "versionEvidence",
+                        "method must be " + PINNED_METHOD
+                );
+            }
+
+            String url = text(
+                    outcome,
+                    "url"
+            );
+            Matcher matcher = PINNED_URL
+                    .matcher(url);
+
+            if (!matcher
+                    .matches()) {
+                throw new CollectedRunInvalidException(
+                        "url",
+                        "not a commit pinned raw URL " + url
+                );
+            }
+
+            String commit = matcher
+                    .group(1);
+
+            if (!commit
+                    .equals(officialRevision) || !commit
+                            .equals(optionalText(
+                                    outcome,
+                                    "sourceCommit"
+                            ))) {
+                throw new CollectedRunInvalidException(
+                        "sourceCommit",
+                        url + " differs from officialRevision or sourceCommit"
+                );
+            }
+
+            if (GRADLE_PROPERTIES
+                    .equals(matcher
+                            .group(2))) {
+                properties
+                        .add(outcome);
+            }
+        }
+
+        if (properties
+                .size() != 1) {
+            throw new CollectedRunInvalidException(
+                    GRADLE_PROPERTIES,
+                    "expected one sealed outcome, found " + properties
+                            .size()
+            );
+        }
+
+        Matcher version = GRADLE_VERSION
+                .matcher(new String(
+                        bytes(ref(
+                                properties
+                                        .getFirst(),
+                                "raw"
+                        )),
+                        StandardCharsets.UTF_8
+                ));
+
+        if (!version
+                .find() || !version
+                        .group(1)
+                        .equals(exactVersion)) {
+            throw new CollectedRunInvalidException(
+                    GRADLE_PROPERTIES,
+                    "version differs from " + exactVersion
+            );
+        }
+    }
+
+    // SUCCESS outcome 하나의 Build 원본
+    private SourceEntry source(JsonNode outcome) {
+
+        String url = text(
+                outcome,
+                "url"
+        );
+        String finalUrl = optionalText(
+                outcome,
+                "finalUrl"
+        );
+        ObjectRef raw = ref(
+                outcome,
+                "raw"
+        );
+
+        return new SourceEntry(
+                text(
+                        outcome,
+                        "documentId"
+                ),
+                documentType(text(
+                        object(
+                                outcome,
+                                "input"
+                        ),
+                        "documentType"
+                )),
+                url,
+                url,
+                finalUrl == null ? url : finalUrl,
+                text(
+                        outcome,
+                        "snapshotId"
+                ),
+                raw
+                        .contentHash(),
+                raw
+                        .objectKey()
+        );
+    }
+
+    // run 입력 snapshot hash, batch는 batchId 순, 문서는 documentId 순
+    private String inputSnapshotHash(
+            ObjectRef discoveryRef,
+            Map<String, String> envelopeHashes,
+            List<JsonNode> outcomes
+    ) {
+
+        List<String> fields = new ArrayList<>();
+        fields
+                .add(INPUT_SNAPSHOT_DOMAIN);
+        fields
+                .add(discoveryRef
+                        .contentHash());
+        fields
+                .add(Integer
+                        .toString(envelopeHashes
+                                .size()));
+        envelopeHashes
+                .forEach((batchId, envelopeHash) -> {
+                    fields
+                            .add(batchId);
+                    fields
+                            .add(envelopeHash);
+                });
+        fields
+                .add(Integer
+                        .toString(outcomes
+                                .size()));
+
+        for (JsonNode outcome : outcomes) {
+            fields
+                    .add(text(
+                            outcome,
+                            "documentId"
+                    ));
+            fields
+                    .add(succeeded(outcome) ? ref(
+                            outcome,
+                            "raw"
+                    )
+                            .contentHash() : NO_RAW);
+            fields
+                    .add(CanonicalJson
+                            .sha256(CanonicalJson
+                                    .canonicalize(jsonMapper
+                                            .writeValueAsString(object(
+                                                    outcome,
+                                                    "versionEvidence"
+                                            )))));
+        }
+
+        return IdHash
+                .hash(fields
+                        .toArray(String[]::new));
+    }
+
+    // discovery batch를 batchId별로, 중복이면 오류
+    private static Map<String, JsonNode> batches(JsonNode discovery) {
+
+        Map<String, JsonNode> batches = new HashMap<>();
+
+        for (JsonNode batch : array(
+                discovery,
+                "batches"
+        )) {
+            if (batches
+                    .put(
+                            text(
+                                    batch,
+                                    "batchId"
+                            ),
+                            batch
+                    ) != null) {
+                throw new CollectedRunInvalidException(
+                        "discovery",
+                        "duplicate batch"
+                );
+            }
+        }
+
+        return batches;
+    }
+
+    // contracts 수집 문서 유형을 Pack 문서 유형으로, 모르는 값은 CollectedRunInvalidException
+    private static DocumentType documentType(String collected) {
+
+        return switch (collected) {
+            case "REFERENCE" -> DocumentType.REFERENCE;
+            case "APPLICATION_PROPERTIES" -> DocumentType.PROPERTIES;
+            case "DEPENDENCY_VERSIONS" -> DocumentType.DEPENDENCIES;
+            case "PROJECT_OVERVIEW" -> DocumentType.PROJECT_OVERVIEW;
+            case "GUIDE" -> DocumentType.GUIDE;
+            case "RELEASE_NOTES" -> DocumentType.RELEASE_NOTE;
+            case "MIGRATION_GUIDE" -> DocumentType.MIGRATION;
+            case "CONFIG_METADATA" -> DocumentType.CONFIG_METADATA;
+            case "JAVADOC" -> DocumentType.JAVADOC;
+            case "EXAMPLE" -> DocumentType.EXAMPLE;
+            default -> throw new CollectedRunInvalidException(
+                    "documentType",
+                    collected
+            );
+        };
+    }
+
+    // objectRef가 가리키는 bytes, 없거나 크기나 hash가 다르면 오류
+    private byte[] bytes(ObjectRef ref) {
+
+        byte[] bytes = objectStore
+                .read(ref
+                        .objectKey())
+                .orElseThrow(() -> new CollectedRunInvalidException(
+                        "MISSING_OBJECT",
+                        ref
+                                .objectKey()
+                ));
+
+        if (bytes.length != ref
+                .sizeBytes() || !sha256(bytes)
+                        .equals(ref
+                                .contentHash())) {
+            throw new CollectedRunInvalidException(
+                    "objectRef",
+                    "size or hash differs for " + ref
+                            .objectKey()
+            );
+        }
+
+        return bytes;
+    }
+
+    // 검증한 JSON 객체 하나
+    private JsonNode json(ObjectRef ref) {
+
+        return parse(
+                new String(
+                        bytes(ref),
+                        StandardCharsets.UTF_8
+                ),
+                ref
+        );
+    }
+
+    // 검증한 JSONL의 줄마다 JSON 객체
+    private List<JsonNode> lines(ObjectRef ref) {
+
+        return new String(
+                bytes(ref),
+                StandardCharsets.UTF_8
+        )
+                .lines()
+                .map(line -> parse(
+                        line,
+                        ref
+                ))
+                .toList();
+    }
+
+    // JSON 객체 텍스트 해석, 객체가 아니거나 형식 오류면 오류
+    private JsonNode parse(
+            String text,
+            ObjectRef ref
+    ) {
+
+        try {
+            JsonNode node = jsonMapper
+                    .readTree(text);
+
+            if (!node
+                    .isObject()) {
+                throw new CollectedRunInvalidException(
+                        "json",
+                        ref
+                                .objectKey() + " is not an object"
+                );
+            }
+
+            return node;
+        } catch (JacksonException exception) {
+            throw new CollectedRunInvalidException(
+                    "json",
+                    ref
+                            .objectKey() + " " + exception
+                                    .getOriginalMessage()
+            );
+        }
+    }
+
+    // 두 문서의 같은 필드가 같아야 통과
+    private static void requireSame(
+            JsonNode expected,
+            JsonNode actual,
+            String field
+    ) {
+
+        if (actual
+                .get(field) == null || !actual
+                        .get(field)
+                        .equals(expected
+                                .get(field))) {
+            throw new CollectedRunInvalidException(
+                    field,
+                    "differs between linked manifests"
+            );
+        }
+    }
+
+    // outcome이 SUCCESS인지
+    private static boolean succeeded(JsonNode outcome) {
+
+        return "SUCCESS"
+                .equals(text(
+                        outcome,
+                        "outcome"
+                ));
+    }
+
+    // input이 projection의 project, exactVersion, applicability와 같은지
+    private static boolean sameScope(
+            JsonNode scope,
+            JsonNode input
+    ) {
+
+        return List
+                .of(
+                        "project",
+                        "exactVersion",
+                        "applicability"
+                )
+                .stream()
+                .allMatch(field -> text(
+                        scope,
+                        field
+                )
+                        .equals(text(
+                                input,
+                                field
+                        )));
+    }
+
+    // 줄마다 documentId 집합
+    private static Set<String> documentIds(List<JsonNode> lines) {
+
+        Set<String> ids = new HashSet<>();
+
+        for (JsonNode line : lines) {
+            ids
+                    .add(text(
+                            line,
+                            "documentId"
+                    ));
+        }
+
+        return ids;
+    }
+
+    // 객체 필드의 objectRef
+    private static ObjectRef ref(
+            JsonNode node,
+            String field
+    ) {
+
+        return ref(object(
+                node,
+                field
+        ));
+    }
+
+    // objectRef 객체
+    private static ObjectRef ref(JsonNode node) {
+
+        return new ObjectRef(
+                text(
+                        node,
+                        "objectKey"
+                ),
+                text(
+                        node,
+                        "contentHash"
+                ),
+                number(
+                        node,
+                        "sizeBytes"
+                )
+        );
+    }
+
+    // 필수 객체 필드
+    private static JsonNode object(
+            JsonNode node,
+            String field
+    ) {
+
+        JsonNode value = node
+                .get(field);
+
+        if (value == null || !value
+                .isObject()) {
+            throw new CollectedRunInvalidException(
+                    field,
+                    "object is required"
+            );
+        }
+
+        return value;
+    }
+
+    // 필수 배열 필드의 원소
+    private static List<JsonNode> array(
+            JsonNode node,
+            String field
+    ) {
+
+        JsonNode value = node
+                .get(field);
+
+        if (value == null || !value
+                .isArray()) {
+            throw new CollectedRunInvalidException(
+                    field,
+                    "array is required"
+            );
+        }
+
+        return List
+                .copyOf(value
+                        .values());
+    }
+
+    // 필수 문자열 필드
+    private static String text(
+            JsonNode node,
+            String field
+    ) {
+
+        String value = optionalText(
+                node,
+                field
+        );
+
+        if (value == null) {
+            throw new CollectedRunInvalidException(
+                    field,
+                    "string is required"
+            );
+        }
+
+        return value;
+    }
+
+    // 문자열 또는 null 필드, 다른 형식이면 오류
+    private static String optionalText(
+            JsonNode node,
+            String field
+    ) {
+
+        JsonNode value = node
+                .get(field);
+
+        if (value == null || value
+                .isNull()) {
+            return null;
+        }
+
+        if (!value
+                .isString()) {
+            throw new CollectedRunInvalidException(
+                    field,
+                    "string is required"
+            );
+        }
+
+        return value
+                .stringValue();
+    }
+
+    // 필수 정수 필드
+    private static long number(
+            JsonNode node,
+            String field
+    ) {
+
+        JsonNode value = node
+                .get(field);
+
+        if (value == null || !value
+                .isIntegralNumber() || !value
+                        .canConvertToLong()) {
+            throw new CollectedRunInvalidException(
+                    field,
+                    "integer is required"
+            );
+        }
+
+        return value
+                .longValue();
+    }
+
+    // 필수 boolean 필드
+    private static boolean flag(
+            JsonNode node,
+            String field
+    ) {
+
+        JsonNode value = node
+                .get(field);
+
+        if (value == null || !value
+                .isBoolean()) {
+            throw new CollectedRunInvalidException(
+                    field,
+                    "boolean is required"
+            );
+        }
+
+        return value
+                .booleanValue();
+    }
+
+    // bytes의 sha256: 접두 hex
+    private static String sha256(byte[] bytes) {
+
+        try {
+            return "sha256:" + HexFormat
+                    .of()
+                    .formatHex(MessageDigest
+                            .getInstance("SHA-256")
+                            .digest(bytes));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException(
+                    "SHA-256 is required by the Java platform",
+                    exception
+            );
+        }
+    }
+}

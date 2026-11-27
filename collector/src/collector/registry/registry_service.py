@@ -1,0 +1,379 @@
+"""registry 정의 import, 승인, 철회, 수집 요청 초안"""
+
+import json
+import re
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+from uuid import uuid4
+
+from collector.contract.canonical_json import JsonValue, utc_text
+from collector.contract.collection_request import CollectionRequest, RequestInput
+from collector.crawl.send_policy import TransportFailed, read_body
+from collector.crawl.transport_gate import (
+    Deferred,
+    Fetch,
+    RobotsDenied,
+    RobotsUnreachable,
+    SourceUnapproved,
+    TransportGate,
+    UrlDenied,
+)
+from collector.db import Conn
+from collector.errors import RequestRejected
+from collector.registry.registry_repository import ProbeEvidence, RegistryRepository
+from collector.registry.source_registry import (
+    GIT_RULES,
+    DefinitionInvalid,
+    Source,
+    definition_hash,
+    parse_definition,
+    registry_hash,
+)
+from collector.store.object_store import ObjectRef, ObjectStore, raw_key
+
+PARSER_PROFILE_REF = re.compile(r"[a-z0-9][a-z0-9-]*@[0-9]+")
+
+
+@dataclass(frozen=True)
+class ImportedSource:
+    source_id: str
+    definition_hash: str
+    approval_state: str
+
+    def to_json(self) -> dict[str, JsonValue]:
+        return {
+            "sourceId": self.source_id,
+            "definitionHash": self.definition_hash,
+            "approvalState": self.approval_state,
+        }
+
+
+@dataclass(frozen=True)
+class RegistryView:
+    approval_state: str
+    registry_hash: str
+
+    def to_json(self) -> dict[str, JsonValue]:
+        return {
+            "approvalState": self.approval_state,
+            "registryHash": self.registry_hash,
+        }
+
+
+@dataclass(frozen=True)
+class ProbeResult:
+    """entry 표본 하나의 판정과 운영자 출력"""
+
+    state: str
+    version: str | None
+    raw: ObjectRef | None
+    nav_count: int
+    main_chars: int
+
+    def evidence(self) -> ProbeEvidence:
+        return ProbeEvidence(
+            state=self.state,
+            version=self.version,
+            raw_hash=None if self.raw is None else self.raw.content_hash,
+        )
+
+    def to_json(self) -> dict[str, JsonValue]:
+        return {
+            "probeState": self.state,
+            "probeVersion": self.version,
+            "raw": None if self.raw is None else self.raw.to_json(),
+            "navCount": self.nav_count,
+            "mainChars": self.main_chars,
+        }
+
+
+FAILED_PROBE = ProbeResult(
+    state="FAILED",
+    version=None,
+    raw=None,
+    nav_count=0,
+    main_chars=0,
+)
+
+
+class RegistryService:
+    def __init__(
+        self,
+        repository: RegistryRepository,
+        gate: TransportGate,
+        store: ObjectStore,
+    ) -> None:
+        self._repository = repository
+        self._gate = gate
+        self._store = store
+
+    def read(self, path: Path) -> tuple[Mapping[str, JsonValue], ...]:
+        """registry 정의 파일의 source entry 목록, 형식 오류는 VALIDATION_FAILED"""
+
+        try:
+            document = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            raise RequestRejected("VALIDATION_FAILED", f"cannot read registry file: {error}") from error
+
+        if not isinstance(document, dict):
+            raise RequestRejected("VALIDATION_FAILED", "registry file must be a JSON object")
+
+        sources = document.get("sources")
+
+        if document.get("registryVersion") != 1 or not isinstance(sources, list) or not sources:
+            raise RequestRejected("VALIDATION_FAILED", "registry file needs registryVersion 1 and sources")
+
+        if not all(isinstance(entry, dict) for entry in sources):
+            raise RequestRejected("VALIDATION_FAILED", "every source entry must be an object")
+
+        ids = [entry.get("sourceId") for entry in sources]
+
+        if len(ids) != len(set(ids)):
+            raise RequestRejected("VALIDATION_FAILED", "sourceId must be unique in a registry file")
+
+        for entry in sources:
+            try:
+                parse_definition(entry)
+            except DefinitionInvalid as error:
+                raise RequestRejected("VALIDATION_FAILED", str(error)) from error
+
+        return tuple(sources)
+
+    def import_entries(
+        self,
+        conn: Conn,
+        entries: Sequence[Mapping[str, JsonValue]],
+    ) -> tuple[ImportedSource, ...]:
+        """새 행은 BLOCKED, 바뀐 BLOCKED 행은 교체, 승인·철회 행과 다르면 거부"""
+
+        imported = []
+
+        for entry in entries:
+            source_id = str(entry["sourceId"])
+            new_hash = definition_hash(entry)
+            current = self._repository.locked(conn, source_id)
+
+            if current is None:
+                self._repository.insert(
+                    conn,
+                    entry,
+                    new_hash,
+                )
+                state = "BLOCKED"
+            else:
+                _, old_hash, state, _, _ = current
+
+                if old_hash != new_hash and state != "BLOCKED":
+                    raise RequestRejected(
+                        "ID_INPUT_CONFLICT",
+                        f"{source_id} is {state} with another definition, import it under a new sourceId",
+                    )
+
+                if old_hash != new_hash:
+                    self._repository.redefine(
+                        conn,
+                        entry,
+                        new_hash,
+                    )
+
+            imported.append(
+                ImportedSource(
+                    source_id=source_id,
+                    definition_hash=new_hash,
+                    approval_state=state,
+                ),
+            )
+
+        return tuple(imported)
+
+    def approve(
+        self,
+        conn: Conn,
+        source_id: str,
+        approved_by: str,
+        parser_profile_ref: str,
+    ) -> RegistryView:
+        """probe 통과와 관측 버전 일치를 먼저 확인, DB CHECK가 같은 규칙을 다시 강제"""
+
+        if not approved_by or PARSER_PROFILE_REF.fullmatch(parser_profile_ref) is None:
+            raise RequestRejected("VALIDATION_FAILED", "approval needs --by and --parser-profile ID@VERSION")
+
+        definition, _, state, probe_state, probe_version = self._locked(conn, source_id)
+
+        if state != "BLOCKED":
+            raise RequestRejected("INVALID_TRANSITION", f"{source_id} is {state}, only BLOCKED can be approved")
+
+        if probe_state != "PASSED" or probe_version != definition["exactVersion"]:
+            raise RequestRejected(
+                "VERSION_UNVERIFIED",
+                f"{source_id} needs a PASSED probe that observed {definition['exactVersion']}",
+            )
+
+        self._repository.approve(
+            conn,
+            source_id,
+            approved_by,
+            parser_profile_ref,
+        )
+        return self._view(conn, "APPROVED")
+
+    def probe_target(
+        self,
+        conn: Conn,
+        source_id: str,
+    ) -> tuple[Source, str]:
+        """BLOCKED source의 정의와 그 definition_hash, 연락처가 없으면 시작 거부"""
+
+        self._gate.check_contact()
+        definition, current_hash, state, _, _ = self._locked(conn, source_id)
+
+        if state != "BLOCKED":
+            raise RequestRejected("INVALID_TRANSITION", f"{source_id} is {state}, only BLOCKED can be probed")
+
+        return parse_definition(definition), current_hash
+
+    def probe_entry(self, source: Source) -> ProbeResult:
+        """TX 밖: robots와 entry를 gate로 한 번씩, entry 원본 저장, 표지 판정"""
+
+        fetch = Fetch(
+            url=source.entry_url,
+            purpose="DISCOVERY",
+            source_id=source.source_id,
+            scope=source.scope,
+        )
+
+        try:
+            response = self._gate.send(None, fetch)
+        except SourceUnapproved as error:
+            raise RequestRejected("INVALID_TRANSITION", f"{source.source_id} is no longer BLOCKED") from error
+        except (RobotsDenied, RobotsUnreachable, UrlDenied, TransportFailed):
+            return FAILED_PROBE
+
+        if isinstance(response, Deferred):
+            code = "BUDGET_EXHAUSTED" if response.reason == "BUDGET" else "HTTP_RETRY_EXHAUSTED"
+            raise RequestRejected(code, f"probe deferred by {response.reason}, retry later")
+
+        if response.status != 200:
+            return FAILED_PROBE
+
+        raw = self._store.put_once(
+            raw_key(
+                source.project,
+                source.exact_version,
+                response.body,
+                source.source_type,
+            ),
+            response.body,
+        )
+        markers, accepted = read_body(response, source.source_type)
+        passed = (
+            accepted
+            and (len(markers.nav_hrefs) > 0 or source.discovery_rule_id in GIT_RULES)
+            and markers.version == source.exact_version
+        )
+        return ProbeResult(
+            state="PASSED" if passed else "FAILED",
+            version=markers.version,
+            raw=raw,
+            nav_count=len(markers.nav_hrefs),
+            main_chars=markers.main_chars,
+        )
+
+    def record_probe(
+        self,
+        conn: Conn,
+        source_id: str,
+        probed_hash: str,
+        result: ProbeResult,
+    ) -> None:
+        recorded = self._repository.record_probe(
+            conn,
+            source_id,
+            probed_hash,
+            result.evidence(),
+        )
+
+        if not recorded:
+            raise RequestRejected("INVALID_TRANSITION", f"{source_id} definition changed during probe")
+
+    def revoke(
+        self,
+        conn: Conn,
+        source_id: str,
+        revoked_by: str,
+    ) -> RegistryView:
+        if not revoked_by:
+            raise RequestRejected("VALIDATION_FAILED", "revocation needs --by")
+
+        _, _, state, _, _ = self._locked(conn, source_id)
+
+        if state != "APPROVED":
+            raise RequestRejected("INVALID_TRANSITION", f"{source_id} is {state}, only APPROVED can be revoked")
+
+        self._repository.revoke(
+            conn,
+            source_id,
+            revoked_by,
+        )
+        return self._view(conn, "REVOKED")
+
+    def draft_request(
+        self,
+        conn: Conn,
+        source_ids: Sequence[str],
+    ) -> CollectionRequest:
+        """승인 source로 새 collectionRequest, DB에 쓰지 않음"""
+
+        approved = self._repository.approved(conn)
+        by_id = {row.source.source_id: row.source for row in approved}
+        missing = sorted(set(source_ids) - set(by_id))
+
+        if missing:
+            raise RequestRejected("SOURCE_UNAPPROVED", f"not approved: {', '.join(missing)}")
+
+        return CollectionRequest(
+            request_id=str(uuid4()),
+            trace_id=str(uuid4()),
+            request_kind="COLLECT",
+            source_registry_hash=registry_hash(approved),
+            inputs=tuple(
+                RequestInput(
+                    source_id=source.source_id,
+                    project=source.project,
+                    exact_version=source.exact_version,
+                    source_type=source.source_type,
+                    document_type=source.document_type,
+                    required=source.required,
+                    applicability=source.applicability,
+                )
+                for source in sorted(
+                    (by_id[source_id] for source_id in set(source_ids)),
+                    key=lambda source: source.source_id,
+                )
+            ),
+            requested_at=utc_text(datetime.now(UTC)),
+        )
+
+    def _locked(
+        self,
+        conn: Conn,
+        source_id: str,
+    ) -> tuple[Mapping[str, JsonValue], str, str, str, str | None]:
+        current = self._repository.locked(conn, source_id)
+
+        if current is None:
+            raise RequestRejected("NOT_FOUND", f"unknown source {source_id}")
+
+        return current
+
+    def _view(
+        self,
+        conn: Conn,
+        approval_state: str,
+    ) -> RegistryView:
+        return RegistryView(
+            approval_state=approval_state,
+            registry_hash=registry_hash(self._repository.approved(conn)),
+        )
