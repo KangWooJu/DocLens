@@ -169,8 +169,54 @@ public final class TestPacks {
                     .add(new ChunkDraft(
                             content,
                             List
-                                    .copyOf(identifiers)
+                                    .copyOf(identifiers),
+                            "{}"
                     ));
+            return this;
+        }
+
+        /** 마지막 문서의 source map JSON 지정 */
+        public Builder documentSourceMap(String json) {
+
+            DocumentDraft last = documents
+                    .getLast();
+            documents
+                    .set(
+                            documents
+                                    .size() - 1,
+                            new DocumentDraft(
+                                    last
+                                            .key(),
+                                    last
+                                            .documentType(),
+                                    last
+                                            .chunks(),
+                                    json
+                            )
+                    );
+            return this;
+        }
+
+        /** 마지막 청크의 source map JSON 지정 */
+        public Builder chunkSourceMap(String json) {
+
+            List<ChunkDraft> chunks = documents
+                    .getLast()
+                    .chunks();
+            ChunkDraft last = chunks
+                    .getLast();
+            chunks
+                    .set(
+                            chunks
+                                    .size() - 1,
+                            new ChunkDraft(
+                                    last
+                                            .content(),
+                                    last
+                                            .identifiers(),
+                                    json
+                            )
+                    );
             return this;
         }
 
@@ -220,11 +266,12 @@ public final class TestPacks {
         }
     }
 
-    // builder가 모은 문서 키, 유형, 청크
+    // builder가 모은 문서 키, 유형, 청크, source map
     private record DocumentDraft(
             String key,
             DocumentType documentType,
-            List<ChunkDraft> chunks
+            List<ChunkDraft> chunks,
+            String sourceMapJson
     ) {
 
         // 청크 없는 문서 초안
@@ -236,7 +283,8 @@ public final class TestPacks {
             this(
                     key,
                     documentType,
-                    new ArrayList<>()
+                    new ArrayList<>(),
+                    "{}"
             );
         }
 
@@ -259,7 +307,8 @@ public final class TestPacks {
                                         .content(),
                                 key,
                                 "[]",
-                                "{}",
+                                chunk
+                                        .sourceMapJson(),
                                 List
                                         .of(),
                                 chunk
@@ -277,7 +326,7 @@ public final class TestPacks {
                     version,
                     id("source-snapshot"),
                     id("raw:" + key),
-                    "{}",
+                    sourceMapJson,
                     List
                             .of(new PackSection(
                                     sectionId,
@@ -292,10 +341,11 @@ public final class TestPacks {
         }
     }
 
-    // builder가 모은 청크 내용과 식별자
+    // builder가 모은 청크 내용, 식별자, source map
     private record ChunkDraft(
             String content,
-            List<String> identifiers
+            List<String> identifiers,
+            String sourceMapJson
     ) {
     }
 }
