@@ -18,6 +18,9 @@ public record ChunkResult(
             InstalledPack pack
     ) {
 
+        CitationSource source = hit
+                .source();
+
         return new ChunkResult(
                 "CHUNK",
                 hit
@@ -25,8 +28,13 @@ public record ChunkResult(
                 hit
                         .content(),
                 new Citation(
-                        hit
-                                .url(),
+                        url(hit),
+                        source
+                                .sourceUrl(),
+                        source
+                                .originalUrl(),
+                        source
+                                .finalUrl(),
                         hit
                                 .headingPath(),
                         hit
@@ -40,7 +48,11 @@ public record ChunkResult(
                         hit
                                 .applicability(),
                         pack
-                                .checksum()
+                                .checksum(),
+                        source
+                                .blockIds(),
+                        source
+                                .sourcePointer()
                 ),
                 new ChunkAttributes(
                         hit
@@ -59,5 +71,18 @@ public record ChunkResult(
                         "BM25"
                 )
         );
+    }
+
+    // 공개 문서 주소, 없으면 문서 수집 주소
+    private static String url(ChunkHit hit) {
+
+        String readerUrl = hit
+                .source()
+                .readerUrl();
+
+        return readerUrl != null
+                ? readerUrl
+                : hit
+                        .url();
     }
 }

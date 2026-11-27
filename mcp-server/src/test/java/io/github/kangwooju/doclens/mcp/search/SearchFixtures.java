@@ -8,6 +8,7 @@ import io.github.kangwooju.doclens.mcp.pack.service.InstalledPackService;
 import io.github.kangwooju.doclens.mcp.pack.store.InstalledPackStore;
 import io.github.kangwooju.doclens.mcp.search.converter.HeadingPathConverter;
 import io.github.kangwooju.doclens.mcp.search.converter.SearchTermsConverter;
+import io.github.kangwooju.doclens.mcp.search.converter.SourceMapConverter;
 import io.github.kangwooju.doclens.mcp.search.facade.SearchFacade;
 import io.github.kangwooju.doclens.mcp.search.repository.ChunkSearchRepository;
 import io.github.kangwooju.doclens.mcp.search.service.SearchService;
@@ -34,7 +35,8 @@ public record SearchFixtures(
                 store,
                 new ChunkSearchRepository(
                         new HeadingPathConverter(),
-                        new SearchTermsConverter()
+                        new SearchTermsConverter(),
+                        new SourceMapConverter()
                 )
         );
 

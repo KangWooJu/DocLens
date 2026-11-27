@@ -323,7 +323,7 @@ class McpStdioProcessTests {
     }
 
     @Test
-    @DisplayName("설치 Pack 기준 4개 Tool 응답과 정확한 wireBytes")
+    @DisplayName("설치 Pack 기준 4개 Tool 응답, source map 인용 필드, 정확한 wireBytes")
     void servesInstalledPacks() throws Exception {
 
         PackInstalls
@@ -333,11 +333,20 @@ class McpStdioProcessTests {
                                 .builder()
                                 .document("overview")
                                 .chunk("Spring Boot overview")
+                                .documentSourceMap("{\"finalUrl\":\"https://raw.example/overview.adoc\","
+                                        + "\"originalUrl\":\"https://raw.example/overview.adoc\"}")
                                 .chunk(
                                         "Configure the server port",
                                         List
                                                 .of("server.port")
                                 )
+                                .chunkSourceMap("[{\"blockId\":\"block-port\",\"blockOrdinal\":0,"
+                                        + "\"charEnd\":null,\"charStart\":null,"
+                                        + "\"citation\":{\"readerUrl\":\"https://docs.example/overview.html#port\","
+                                        + "\"sourceUrl\":\"https://github.example/overview.adoc#L7\"},"
+                                        + "\"domPath\":\"2/0\",\"elementId\":\"port\","
+                                        + "\"headingLocator\":\"heading-port\",\"headingPath\":[\"overview\"],"
+                                        + "\"links\":[]}]")
                 );
         process = start();
         BufferedReader stdout = new BufferedReader(new InputStreamReader(
@@ -487,6 +496,33 @@ class McpStdioProcessTests {
                         .at("/results/0/citation/checksum")
                         .asString()
         );
+        assertEquals(
+                "https://docs.example/overview.html#port",
+                search
+                        .at("/results/0/citation/url")
+                        .asString()
+        );
+        assertEquals(
+                "https://github.example/overview.adoc#L7",
+                search
+                        .at("/results/0/citation/sourceUrl")
+                        .asString()
+        );
+        assertEquals(
+                "block-port",
+                search
+                        .at("/results/0/citation/blockIds/0")
+                        .asString()
+        );
+        assertEquals(
+                "2/0",
+                search
+                        .at("/results/0/citation/sourcePointer/0/domPath")
+                        .asString()
+        );
+        assertTrue(search
+                .at("/results/1/citation/sourceUrl")
+                .isNull());
         assertEquals(
                 stdoutLines
                         .getLast()

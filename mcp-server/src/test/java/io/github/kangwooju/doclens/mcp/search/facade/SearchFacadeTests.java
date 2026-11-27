@@ -1,7 +1,9 @@
 package io.github.kangwooju.doclens.mcp.search.facade;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -25,6 +27,7 @@ import io.github.kangwooju.doclens.mcp.search.dto.ChunkResult;
 import io.github.kangwooju.doclens.mcp.search.dto.Citation;
 import io.github.kangwooju.doclens.mcp.search.dto.SearchPage;
 import io.github.kangwooju.doclens.mcp.search.dto.SearchRequest;
+import io.github.kangwooju.doclens.mcp.search.dto.SourcePointer;
 
 @DisplayName("문서 검색 Facade")
 class SearchFacadeTests {
@@ -130,7 +133,7 @@ class SearchFacadeTests {
     }
 
     @Test
-    @DisplayName("topK 개수, 1부터 시작하는 순위, Pack 값만으로 만든 인용")
+    @DisplayName("topK 개수, 1부터 시작하는 순위, Pack 값만으로 만든 인용, source map 없는 출처 값의 null")
     void buildsRankedResultsWithCitations() {
 
         Path file = install(
@@ -211,6 +214,96 @@ class SearchFacadeTests {
                             .packId(),
                     citation
                             .packId()
+            );
+            assertNull(citation
+                    .sourceUrl());
+            assertNull(citation
+                    .originalUrl());
+            assertNull(citation
+                    .finalUrl());
+            assertTrue(citation
+                    .blockIds()
+                    .isEmpty());
+            assertTrue(citation
+                    .sourcePointer()
+                    .isEmpty());
+        }
+    }
+
+    @Test
+    @DisplayName("source map의 공개 주소 url, 원본 주소, 문서 주소, blockIds, sourcePointer")
+    void buildsCitationFromSourceMaps() {
+
+        PackInstalls
+                .install(
+                        cacheRoot,
+                        TestPacks
+                                .builder()
+                                .document("mapped")
+                                .documentSourceMap("{\"finalUrl\":\"https://raw.example/final.adoc\","
+                                        + "\"originalUrl\":\"https://raw.example/original.adoc\"}")
+                                .chunk("spring boot mapped")
+                                .chunkSourceMap("[{\"blockId\":\"block-1\",\"blockOrdinal\":0,"
+                                        + "\"charEnd\":null,\"charStart\":null,"
+                                        + "\"citation\":{\"readerUrl\":\"https://docs.example/mapped.html#top\","
+                                        + "\"sourceUrl\":\"https://github.example/mapped.adoc#L1\"},"
+                                        + "\"domPath\":\"0/1\",\"elementId\":null,"
+                                        + "\"headingLocator\":\"heading-1\",\"headingPath\":[\"mapped\"],"
+                                        + "\"links\":[]}]")
+                );
+
+        try (SearchFixtures search = SearchFixtures
+                .over(cacheRoot)) {
+            Citation citation = search
+                    .searchFacade()
+                    .search(request(
+                            TestPacks.VERSION,
+                            null,
+                            5
+                    ))
+                    .results()
+                    .getFirst()
+                    .citation();
+
+            assertEquals(
+                    "https://docs.example/mapped.html#top",
+                    citation
+                            .url()
+            );
+            assertEquals(
+                    "https://github.example/mapped.adoc#L1",
+                    citation
+                            .sourceUrl()
+            );
+            assertEquals(
+                    "https://raw.example/original.adoc",
+                    citation
+                            .originalUrl()
+            );
+            assertEquals(
+                    "https://raw.example/final.adoc",
+                    citation
+                            .finalUrl()
+            );
+            assertEquals(
+                    List
+                            .of("block-1"),
+                    citation
+                            .blockIds()
+            );
+            assertEquals(
+                    List
+                            .of(new SourcePointer(
+                                    "block-1",
+                                    "0/1",
+                                    null,
+                                    "heading-1",
+                                    0,
+                                    null,
+                                    null
+                            )),
+                    citation
+                            .sourcePointer()
             );
         }
     }
