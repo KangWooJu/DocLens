@@ -34,7 +34,7 @@
 DocLens는 프로젝트가 쓰는 바로 그 버전의 Spring 공식 문서를, 미리 수집·정제·색인한 로컬 파일로 에이전트에게 건넵니다. 모든 결과에는 출처(URL, 제목 경로, 버전)가 붙습니다. 에이전트는 맞는 버전의 맞는 쪽을 읽고, 어디서 읽었는지 밝힙니다.
 
 > [!NOTE]
-> DocLens는 개발 초기 단계입니다. Pack 형식과 이를 검증하는 Reader는 완성됐고, MCP 서버·Agent Skill·수집 파이프라인은 만드는 중입니다. *예정*으로 표시된 기능은 아직 동작하지 않습니다.
+> DocLens는 개발 초기 단계입니다. `v0.1.0`은 빌드 쪽 전체(scheduler, collector, pipeline)를 로컬에서 실행하고, 만들어진 Pack을 로컬 MCP 서버로 검색합니다. Agent Skill과 AWS 배포는 다음 단계입니다. *예정*으로 표시된 기능은 아직 동작하지 않습니다.
 
 ## 왜 필요한가
 
@@ -66,7 +66,7 @@ DocLens는 반복되는 일을 모델 밖으로 옮깁니다.
 ```
 
 - **Knowledge Pack.** 문서 버전마다 SQLite 파일 하나입니다. 문서, 섹션, 청크, 코드 변형, 식별자, 링크, 전문 검색 색인이 들어 있습니다. 논리 내용 해시로 빌드가 달라도 같은 내용인지 알 수 있습니다. Reader는 검색 전에 Pack 전체를 검증합니다.
-- **로컬 MCP 서버** *(예정)*. 사용자 PC에서 STDIO로 실행되고, 설치된 Pack만으로 답합니다. 원격 검색 서비스가 없어 검색 요청이 PC 밖으로 나가지 않습니다. 읽기 전용이라 프로젝트 파일을 고치거나 셸 명령을 실행하지 않습니다.
+- **로컬 MCP 서버**. 사용자 PC에서 STDIO로 실행되고, 설치된 Pack만으로 답합니다. 원격 검색 서비스가 없어 검색 요청이 PC 밖으로 나가지 않습니다. 읽기 전용이라 프로젝트 파일을 고치거나 셸 명령을 실행하지 않습니다.
 - **Agent Skill** *(예정)*. 어떤 버전을 확인하고, 예산 안에서 어떻게 검색하고, 어떻게 인용할지 에이전트에게 알려 주는 프롬프트 파일입니다. 별도 LLM API 없이 사용자의 에이전트가 직접 씁니다.
 
 예정된 검색 결과 형태(예시):
@@ -83,24 +83,23 @@ https://docs.spring.io/spring-security/reference/...
 | 단계 | 내용 | 상태 |
 |---|---|---|
 | A | 언어 간 계약, Pack v1 Writer와 검증 Reader | 완료 |
-| B | `mcp-server`: 설치된 Pack 검색 | 다음 |
-| C | `pipeline`: 공식 문서 파싱·청킹 | 예정 |
-| D | `pipeline`: 저장과 Pack 내보내기 | 예정 |
-| E | `collector`: 공식 문서 수집 | 예정 |
-| F | `scheduler-server`와 로컬 전체 실행 | 예정 |
-| G | AWS 배포 | 예정 |
-
-첫 릴리스 `v0.1.0`은 MCP 서버가 Pack을 검색할 수 있게 되는 시점에 낼 예정입니다.
+| B | `mcp-server`: 설치된 Pack 검색 | 완료 |
+| C | `pipeline`: 공식 문서 파싱·청킹 | 완료 |
+| D | `pipeline`: 저장과 Pack 내보내기 | 완료 |
+| E | `collector`: 공식 문서 수집(출처: Spring Boot GitHub 저장소) | 완료 |
+| F | `scheduler-server`와 로컬 전체 실행 | 완료(`v0.1.0`) |
+| G | AWS 배포 | 다음 |
+| | Agent Skill | 예정 |
 
 ## 저장소 구성
 
 | 경로 | 내용 |
 |---|---|
 | `knowledge-core/` | Pack 형식: canonical JSON, Pack Writer·Reader. `pipeline`과 `mcp-server`가 함께 사용 |
-| `mcp-server/` | 로컬 STDIO MCP 서버 *(예정)* |
-| `pipeline/` | 파싱, 청킹, 저장, Pack 내보내기 *(예정)* |
-| `scheduler-server/` | 수집·가공 일정 관리 *(예정)* |
-| `collector/` | 공식 문서 Python 수집기 *(예정)* |
+| `mcp-server/` | 로컬 STDIO MCP 서버 |
+| `pipeline/` | 파싱, 청킹, 저장, Pack 내보내기 |
+| `scheduler-server/` | 수집·가공 일정 관리 |
+| `collector/` | 공식 문서 Python 수집기 |
 | `contracts/` | 언어 간 공유 JSON Schema, 예시, golden 값 |
 | `tools/` | 계약 검사 스크립트 |
 | `maintenance-cli/` | 운영 도구 *(예정)* |
@@ -151,6 +150,26 @@ Docker와 Compose가 필요합니다. `.env.example`을 `.env`로 복사해 coll
    ```
 
 pipeline과 scheduler 컨테이너는 `pipeline/build/libs`, `scheduler-server/build/libs`의 jar를 그대로 실행합니다. 스택이 도는 동안 jar를 다시 빌드하지 말고, 먼저 `docker compose --profile app --profile worker down`으로 내립니다.
+
+## MCP 서버 사용
+
+Pack은 공개 배포하지 않습니다. 위의 로컬 스택으로 Pack을 만든 뒤 캐시에 설치하고, 에이전트에 서버를 등록합니다. JDK 21이 필요합니다. 서버 jar는 `mcp-server/build/libs/mcp-server-<version>.jar`(`./gradlew :mcp-server:bootJar`) 또는 GitHub Release의 `mcp-server-<version>.jar`입니다.
+
+1. 최신 Pack을 캐시에 설치합니다. 서버는 `DOCLENS_CACHE`(절대 경로, 기본값은 macOS `~/Library/Caches/doclens`, Windows `%LOCALAPPDATA%\doclens\cache`, 그 밖에는 `$XDG_CACHE_HOME/doclens` 또는 `~/.cache/doclens`) 아래 `packs/<packId>/<buildId>/<sha256>.pack`을 읽고, 시작할 때 파일마다 sha256을 확인합니다.
+
+   ```bash
+   export DOCLENS_CACHE="$HOME/Library/Caches/doclens"
+   key=$(curl -sf http://127.0.0.1:9090/doclens/packs/<packId>/publications/<sequence>.json | python3 -c "import json,sys;print(json.load(sys.stdin)['objectKey'])")
+   mkdir -p "$DOCLENS_CACHE/$(dirname "$key")" && curl -sf -o "$DOCLENS_CACHE/$key" "http://127.0.0.1:9090/doclens/$key"
+   ```
+
+2. 서버를 등록합니다. Claude Code 예:
+
+   ```bash
+   claude mcp add doclens -e DOCLENS_CACHE="$DOCLENS_CACHE" -- java -jar /absolute/path/to/mcp-server-0.1.0.jar
+   ```
+
+3. Tool: `get_status`, `list_projects`, `list_versions`, `search_docs`(`exactVersion` 필수). Pack은 시작할 때 한 번 읽으므로 새 Pack을 설치하면 서버를 다시 시작합니다.
 
 ## Phase 1 측정
 
