@@ -69,13 +69,13 @@ DocLens는 반복되는 일을 모델 밖으로 옮깁니다.
 - **로컬 MCP 서버**. 사용자 PC에서 STDIO로 실행되고, 설치된 Pack만으로 답합니다. 원격 검색 서비스가 없어 검색 요청이 PC 밖으로 나가지 않습니다. 읽기 전용이라 프로젝트 파일을 고치거나 셸 명령을 실행하지 않습니다.
 - **Agent Skill** *(예정)*. 어떤 버전을 확인하고, 예산 안에서 어떻게 검색하고, 어떻게 인용할지 에이전트에게 알려 주는 프롬프트 파일입니다. 별도 LLM API 없이 사용자의 에이전트가 직접 씁니다.
 
-예정된 검색 결과 형태(예시):
+검색 결과 형태(Spring Boot 4.1.2 Pack에 `search_docs`를 호출한 결과를 줄임):
 
 ```
-spring-security@7.0.2 · Servlet Applications › Configuration › Java Configuration
-https://docs.spring.io/spring-security/reference/...
-  @Bean
-  SecurityFilterChain filterChain(HttpSecurity http) throws Exception { ... }
+spring-boot@4.1.2 · Endpoints › Hypermedia for Actuator Web Endpoints
+https://docs.spring.io/spring-boot/4.1/reference/actuator/endpoints.html#actuator.endpoints.hypermedia
+source: https://github.com/spring-projects/spring-boot/blob/634e6fd…/actuator/endpoints.adoc?plain=1#L344
+  (section text, code variants, block ids and source pointers follow)
 ```
 
 ## 진행 상황

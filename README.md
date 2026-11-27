@@ -69,13 +69,13 @@ A cited source that exists is not the same as a source that supports the claim. 
 - **Local MCP server**. Runs on your machine over STDIO and answers from installed Packs only. No remote search service: searches never leave your machine. Read-only: it never edits your project or runs shell commands.
 - **Agent Skill** *(planned)*. A plain prompt file that tells your agent which version to check, how to search within a budget, and how to cite. No extra LLM API: your own agent does the writing.
 
-Planned search result shape (illustrative):
+Search result shape, trimmed from a `search_docs` call on the Spring Boot 4.1.2 Pack:
 
 ```
-spring-security@7.0.2 · Servlet Applications › Configuration › Java Configuration
-https://docs.spring.io/spring-security/reference/...
-  @Bean
-  SecurityFilterChain filterChain(HttpSecurity http) throws Exception { ... }
+spring-boot@4.1.2 · Endpoints › Hypermedia for Actuator Web Endpoints
+https://docs.spring.io/spring-boot/4.1/reference/actuator/endpoints.html#actuator.endpoints.hypermedia
+source: https://github.com/spring-projects/spring-boot/blob/634e6fd…/actuator/endpoints.adoc?plain=1#L344
+  (section text, code variants, block ids and source pointers follow)
 ```
 
 ## Status
