@@ -8,6 +8,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/status-early_development-A6E15E?style=flat-square&labelColor=0E1512" alt="Status: early development">
+  <a href="https://github.com/KangWooJu/DocLens/releases/tag/v0.1.0"><img src="https://img.shields.io/badge/release-v0.1.0-A6E15E?style=flat-square&labelColor=0E1512" alt="Release v0.1.0"></a>
   <img src="https://img.shields.io/badge/java-21-F3E7D3?style=flat-square&labelColor=0E1512" alt="Java 21">
   <img src="https://img.shields.io/badge/spring_boot-4.1-F3E7D3?style=flat-square&labelColor=0E1512" alt="Spring Boot 4.1">
   <img src="https://img.shields.io/badge/python-3.13-F3E7D3?style=flat-square&labelColor=0E1512" alt="Python 3.13">
@@ -87,7 +88,7 @@ source: https://github.com/spring-projects/spring-boot/blob/634e6fd…/actuator/
 | C | `pipeline`: parse and chunk official docs | Done |
 | D | `pipeline`: store and export Packs | Done |
 | E | `collector`: fetch official docs (source: the Spring Boot GitHub repository) | Done |
-| F | `scheduler-server` and a local end-to-end run | Done (`v0.1.0`) |
+| F | `scheduler-server` and a local end-to-end run | Done ([`v0.1.0`](https://github.com/KangWooJu/DocLens/releases/tag/v0.1.0), 2026-11-27) |
 | G | Deployment on AWS | Next |
 | | Agent Skill | Planned |
 
@@ -153,7 +154,13 @@ The pipeline and scheduler containers run the jars in `pipeline/build/libs` and 
 
 ## Use the MCP server
 
-Packs are not published. Build one with the local stack above, then install it and register the server with your agent. Requires JDK 21. The server jar is `mcp-server/build/libs/mcp-server-<version>.jar` (`./gradlew :mcp-server:bootJar`) or the `mcp-server-<version>.jar` asset of a GitHub Release.
+Packs are not published. Build one with the local stack above, then install it and register the server with your agent. Requires JDK 21. Download the server jar from the [`v0.1.0` release](https://github.com/KangWooJu/DocLens/releases/tag/v0.1.0) and check it, or build it with `./gradlew :mcp-server:bootJar` (`mcp-server/build/libs/mcp-server-<version>.jar`):
+
+```bash
+curl -fLO https://github.com/KangWooJu/DocLens/releases/download/v0.1.0/mcp-server-0.1.0.jar
+curl -fLO https://github.com/KangWooJu/DocLens/releases/download/v0.1.0/SHA256SUMS
+shasum -a 256 -c SHA256SUMS
+```
 
 1. Install the latest Pack into the cache. The server reads `packs/<packId>/<buildId>/<sha256>.pack` under `DOCLENS_CACHE` (an absolute path; default `~/Library/Caches/doclens` on macOS, `%LOCALAPPDATA%\doclens\cache` on Windows, `$XDG_CACHE_HOME/doclens` or `~/.cache/doclens` elsewhere) and checks each file's sha256 at startup:
 
