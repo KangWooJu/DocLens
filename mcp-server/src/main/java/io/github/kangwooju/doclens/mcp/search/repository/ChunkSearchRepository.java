@@ -12,6 +12,7 @@ import org.springframework.stereotype.Repository;
 
 import io.github.kangwooju.doclens.mcp.search.converter.HeadingPathConverter;
 import io.github.kangwooju.doclens.mcp.search.converter.SearchTermsConverter;
+import io.github.kangwooju.doclens.mcp.search.converter.SourceMapConverter;
 import io.github.kangwooju.doclens.mcp.search.dto.ChunkHit;
 import io.github.kangwooju.doclens.mcp.search.dto.SearchTerms;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +28,8 @@ public class ChunkSearchRepository {
     private final HeadingPathConverter headingPathConverter;
 
     private final SearchTermsConverter searchTermsConverter;
+
+    private final SourceMapConverter sourceMapConverter;
 
     /** 정렬된 청크 후보, 최대 limit개 */
     public List<ChunkHit> find(
@@ -122,6 +125,7 @@ public class ChunkSearchRepository {
                 + " hits AS (SELECT chunk_rowid FROM lexical UNION SELECT chunk_rowid FROM exact)"
                 + " SELECT c.chunk_id, c.document_id, c.section_id, c.content,"
                 + " d.url, d.applicability, d.exact_version, s.anchor, s.heading_path,"
+                + " d.source_map_json AS document_source_map, c.source_map_json AS chunk_source_map,"
                 + " l.score, e.chunk_rowid IS NOT NULL AS exact_match"
                 + " FROM hits h"
                 + " JOIN chunks c ON c.rowid = h.chunk_rowid"
@@ -164,6 +168,13 @@ public class ChunkSearchRepository {
                 headingPathConverter
                         .toList(rows
                                 .getString("heading_path")),
+                sourceMapConverter
+                        .toSource(
+                                rows
+                                        .getString("document_source_map"),
+                                rows
+                                        .getString("chunk_source_map")
+                        ),
                 lexicalScore,
                 rows
                         .getBoolean("exact_match")

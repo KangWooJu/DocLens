@@ -13,6 +13,7 @@ public record ChunkHit(
         String exactVersion,
         String anchor,
         List<String> headingPath,
+        CitationSource source,
         Double lexicalScore,
         boolean exactIdentifierMatch
 ) {
